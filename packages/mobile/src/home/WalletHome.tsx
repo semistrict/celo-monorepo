@@ -39,7 +39,7 @@ import { initializeSentryUserContext } from 'src/sentry/actions'
 import DisconnectBanner from 'src/shared/DisconnectBanner'
 import { resetStandbyTransactions } from 'src/transactions/actions'
 import TransactionsList from 'src/transactions/TransactionsList'
-import { currentAccountSelector } from 'src/web3/selectors'
+import { currentAccountSelector } from 'src/geth/selectors'
 
 const HEADER_ICON_SIZE = 24
 const HEADER_BUTTON_MARGIN = 12
