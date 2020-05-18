@@ -83,7 +83,7 @@ export class Account extends React.Component<Props, State> {
 
   state: State = {
     version: '',
-  }
+}
 
   async componentDidMount() {
     this.setState({ version: DeviceInfo.getVersion() })
