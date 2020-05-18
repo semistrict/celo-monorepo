@@ -21,6 +21,7 @@ import CalculateFee, {
 } from 'src/fees/CalculateFee'
 import { getFeeDollars } from 'src/fees/selectors'
 import { completePaymentRequest, declinePaymentRequest } from 'src/firebase/actions'
+import { currentAccountSelector } from 'src/geth/selectors'
 import i18n, { Namespaces, withTranslation } from 'src/i18n'
 import { InviteBy } from 'src/invite/actions'
 import { navigateBack } from 'src/navigator/NavigationService'
@@ -34,7 +35,6 @@ import TransferReviewCard from 'src/send/TransferReviewCard'
 import DisconnectBanner from 'src/shared/DisconnectBanner'
 import { fetchDollarBalance } from 'src/stableToken/actions'
 import Logger from 'src/utils/Logger'
-import { currentAccountSelector } from 'src/geth/selectors'
 
 export interface ConfirmationInput {
   recipient: Recipient

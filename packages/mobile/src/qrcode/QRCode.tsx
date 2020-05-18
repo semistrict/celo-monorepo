@@ -12,6 +12,7 @@ import { connect } from 'react-redux'
 import { UserContactDetails } from 'src/account/reducer'
 import { userContactDetailsSelector } from 'src/account/selectors'
 import { AvatarSelf } from 'src/components/AvatarSelf'
+import { currentAccountSelector } from 'src/geth/selectors'
 import i18n, { Namespaces, withTranslation } from 'src/i18n'
 import { headerWithBackButton } from 'src/navigator/Headers'
 import { navigate } from 'src/navigator/NavigationService'
@@ -19,7 +20,6 @@ import { Screens } from 'src/navigator/Screens'
 import QRCode from 'src/qrcode/QRGen'
 import { RootState } from 'src/redux/reducers'
 import { shareQRCode, SVG } from 'src/send/actions'
-import { currentAccountSelector } from 'src/geth/selectors'
 
 interface DispatchProps {
   shareQRCode: typeof shareQRCode

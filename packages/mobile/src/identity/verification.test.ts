@@ -23,8 +23,8 @@ import {
   doVerificationFlow,
   requestAndRetrieveAttestations,
   startVerification,
-  VerificationStatus,
   VERIFICATION_TIMEOUT,
+  VerificationStatus,
 } from 'src/identity/verification'
 import { getContractKitOutsideGenerator } from 'src/web3/contracts'
 import { sleep } from 'test/utils'

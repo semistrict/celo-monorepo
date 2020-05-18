@@ -5,6 +5,7 @@ import { Query, QueryResult } from 'react-apollo'
 import { connect } from 'react-redux'
 import { MoneyAmount, Token, TokenTransactionType, UserTransactionsQuery } from 'src/apollo/types'
 import { CURRENCIES, CURRENCY_ENUM } from 'src/geth/consts'
+import { currentAccountSelector } from 'src/geth/selectors'
 import { refreshAllBalances } from 'src/home/actions'
 import { SENTINEL_INVITE_COMMENT } from 'src/invite/actions'
 import { LocalCurrencyCode } from 'src/localCurrency/consts'
@@ -19,7 +20,6 @@ import {
 } from 'src/transactions/reducer'
 import TransactionFeed, { FeedItem, FeedType } from 'src/transactions/TransactionFeed'
 import { isPresent } from 'src/utils/typescript'
-import { currentAccountSelector } from 'src/geth/selectors'
 
 // Query poll interval
 const POLL_INTERVAL = 10000 // 10 secs
