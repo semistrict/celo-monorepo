@@ -12,7 +12,6 @@ import { defaultCountryCodeSelector, e164NumberSelector } from 'src/account/sele
 import { showError } from 'src/alert/actions'
 import { ErrorMessages } from 'src/app/ErrorMessages'
 import { USE_PHONE_NUMBER_PRIVACY } from 'src/config'
-import { getConnectedAccount } from 'src/geth/saga'
 import {
   endImportContacts,
   FetchPhoneAddressesAction,
@@ -26,6 +25,7 @@ import { getAllContacts } from 'src/utils/contacts'
 import Logger from 'src/utils/Logger'
 import { checkContactsPermission } from 'src/utils/permissions'
 import { getContractKit } from 'src/web3/contracts'
+import { getConnectedAccount } from 'src/web3/saga'
 
 const TAG = 'identity/contactMapping'
 

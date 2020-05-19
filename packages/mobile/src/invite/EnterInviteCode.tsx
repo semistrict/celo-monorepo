@@ -12,7 +12,6 @@ import { hideAlert, showError } from 'src/alert/actions'
 import CodeRow, { CodeRowStatus } from 'src/components/CodeRow'
 import DevSkipButton from 'src/components/DevSkipButton'
 import { CELO_FAUCET_LINK, SHOW_GET_INVITE_LINK } from 'src/config'
-import { currentAccountSelector } from 'src/geth/selectors'
 import { Namespaces, withTranslation } from 'src/i18n'
 import { redeemInvite, skipInvite } from 'src/invite/actions'
 import { extractValidInviteCode, getValidInviteCodeFromReferrerData } from 'src/invite/utils'
@@ -21,6 +20,7 @@ import { navigate } from 'src/navigator/NavigationService'
 import { Screens } from 'src/navigator/Screens'
 import { RootState } from 'src/redux/reducers'
 import { navigateToURI } from 'src/utils/linking'
+import { currentAccountSelector } from 'src/web3/selectors'
 
 interface StateProps {
   redeemComplete: boolean

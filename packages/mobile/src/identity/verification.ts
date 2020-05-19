@@ -20,8 +20,6 @@ import { CustomEventNames } from 'src/analytics/constants'
 import { setNumberVerified } from 'src/app/actions'
 import { ErrorMessages } from 'src/app/ErrorMessages'
 import { SMS_RETRIEVER_APP_SIGNATURE, USE_PHONE_NUMBER_PRIVACY } from 'src/config'
-import { getConnectedAccount, getConnectedUnlockedAccount } from 'src/geth/saga'
-import { privateCommentKeySelector } from 'src/geth/selectors'
 import { refreshAllBalances } from 'src/home/actions'
 import {
   Actions,
@@ -38,6 +36,8 @@ import { startAutoSmsRetrieval } from 'src/identity/smsRetrieval'
 import { sendTransaction } from 'src/transactions/send'
 import Logger from 'src/utils/Logger'
 import { getContractKit } from 'src/web3/contracts'
+import { getConnectedAccount, getConnectedUnlockedAccount } from 'src/web3/saga'
+import { privateCommentKeySelector } from 'src/web3/selectors'
 
 const TAG = 'identity/verification'
 

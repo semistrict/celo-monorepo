@@ -22,7 +22,6 @@ import { showMessage } from 'src/alert/actions'
 import { exitBackupFlow } from 'src/app/actions'
 import { ALERT_BANNER_DURATION, DEFAULT_TESTNET, SHOW_TESTNET_BANNER } from 'src/config'
 import { CURRENCY_ENUM } from 'src/geth/consts'
-import { currentAccountSelector } from 'src/geth/selectors'
 import { refreshAllBalances, setLoading } from 'src/home/actions'
 import CeloDollarsOverview from 'src/home/CeloDollarsOverview'
 import HeaderButton from 'src/home/HeaderButton'
@@ -40,6 +39,7 @@ import { initializeSentryUserContext } from 'src/sentry/actions'
 import DisconnectBanner from 'src/shared/DisconnectBanner'
 import { resetStandbyTransactions } from 'src/transactions/actions'
 import TransactionsList from 'src/transactions/TransactionsList'
+import { currentAccountSelector } from 'src/web3/selectors'
 
 const HEADER_ICON_SIZE = 24
 const HEADER_BUTTON_MARGIN = 12
