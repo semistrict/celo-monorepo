@@ -1,5 +1,5 @@
 import { ContractKit } from '@celo/contractkit'
-import { getPhoneHash, isE164Number, PhoneNumberUtils } from '@celo/utils/src/phoneNumbers'
+import { getPhoneHash, isE164Number } from '@celo/utils/src/phoneNumbers'
 import crypto from 'crypto'
 import BlindThresholdBls from 'react-native-blind-threshold-bls'
 import { call, put, select } from 'redux-saga/effects'
@@ -84,13 +84,7 @@ async function getPhoneNumberSalt(e164Number: string, account: string, contractK
 
   Logger.debug(`${TAG}@getPhoneNumberSalt`, 'Retrieving blinded message')
   const base64BlindedMessage = await BlindThresholdBls.blindMessage(e164Number)
-  const hashedPhoneNumber = PhoneNumberUtils.getPhoneHash(e164Number)
-  const base64BlindSig = await postToSignMessage(
-    base64BlindedMessage,
-    account,
-    hashedPhoneNumber,
-    contractKit
-  )
+  const base64BlindSig = await postToSignMessage(base64BlindedMessage, account, contractKit)
   Logger.debug(`${TAG}@getPhoneNumberSalt`, 'Retrieving unblinded signature')
   const base64UnblindedSig = await BlindThresholdBls.unblindMessage(
     base64BlindSig,
@@ -110,7 +104,6 @@ interface SignMessageResponse {
 async function postToSignMessage(
   base64BlindedMessage: string,
   account: string,
-  hashedPhoneNumber: string,
   contractKit: ContractKit
 ) {
   Logger.debug(`${TAG}@postToSignMessage`, `Posting to ${SIGN_MESSAGE_ENDPOINT}`)
