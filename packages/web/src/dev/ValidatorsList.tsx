@@ -8,6 +8,7 @@ import { I18nProps, withNamespaces } from 'src/i18n'
 import Chevron, { Direction } from 'src/icons/chevron'
 import { colors } from 'src/styles'
 import { weiToDecimal } from 'src/utils/utils'
+import Hoverable from 'src/shared/Hoverable'
 
 class Text extends RNText {
   render() {
@@ -19,29 +20,46 @@ interface HeaderCellProps {
   style: any[]
   name: string
   order: boolean | null
+  tooltip?: string
   onClick: () => void
 }
 
-const HeaderCell = React.memo(function HeaderCellFn({
-  style,
-  name,
-  order,
-  onClick,
-}: HeaderCellProps) {
-  return (
-    <View onClick={onClick} style={[styles.tableHeaderCell, ...((style || []) as any)]}>
-      <Text>{name}</Text>
-      <Text
-        style={[
-          styles.tableHeaderCellArrow,
-          ...(order !== null ? [styles.tableHeaderCellArrowVisible] : []),
-        ]}
-      >
-        <Chevron direction={order ? Direction.up : Direction.down} color={colors.white} size={10} />
-      </Text>
-    </View>
-  )
-})
+class HeaderCell extends React.PureComponent<HeaderCellProps, { hover: boolean }> {
+  state = {
+    hover: false,
+  }
+
+  onHoverIn = () => this.setState({ hover: true })
+  onHoverOut = () => this.setState({ hover: false })
+
+  render() {
+    const { style, name, order, onClick, tooltip } = this.props
+    const { hover } = this.state
+    return (
+      <Hoverable onHoverIn={this.onHoverIn} onHoverOut={this.onHoverOut}>
+        <View onClick={onClick} style={[styles.tableHeaderCell, ...((style || []) as any)]}>
+          <Text>
+            {name} {hover ? '---' : '.'}
+          </Text>
+          <Text
+            style={[
+              styles.tableHeaderCellArrow,
+              ...(order !== null ? [styles.tableHeaderCellArrowVisible] : []),
+            ]}
+          >
+            <Chevron
+              direction={order ? Direction.up : Direction.down}
+              color={colors.white}
+              size={10}
+            />
+          </Text>
+
+          {tooltip && hover && <View style={[styles.tooltip]}>{tooltip}</View>}
+        </View>
+      </Hoverable>
+    )
+  }
+}
 
 interface Edges<T> {
   edges: Array<{

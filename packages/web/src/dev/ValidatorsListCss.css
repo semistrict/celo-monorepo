@@ -1,0 +1,6 @@
+.hoverable .hoverableContent {
+  display: none;
+}
+.hoverable:hover .hoverableContent {
+  display: block;
+}
