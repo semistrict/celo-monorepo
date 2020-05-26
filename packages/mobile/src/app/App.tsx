@@ -1,11 +1,11 @@
 import colors from '@celo/react-components/styles/colors'
+import BigNumber from 'bignumber.js'
 import * as React from 'react'
 import { ApolloProvider } from 'react-apollo'
-import { withTranslation } from 'react-i18next'
 import { DeviceEventEmitter, Linking, StatusBar, YellowBox } from 'react-native'
-import { SafeAreaProvider } from 'react-native-safe-area-context'
-import { useScreens } from 'react-native-screens'
-import SplashScreen from 'react-native-splash-screen'
+import { getNumberFormatSettings } from 'react-native-localize'
+import { SafeAreaProvider } from 'react-native-safe-area-view'
+import { enableScreens } from 'react-native-screens'
 import { Provider } from 'react-redux'
 import { PersistGate } from 'redux-persist/integration/react'
 import CeloAnalytics from 'src/analytics/CeloAnalytics'
@@ -15,13 +15,11 @@ import { openDeepLink } from 'src/app/actions'
 import AppLoading from 'src/app/AppLoading'
 import ErrorBoundary from 'src/app/ErrorBoundary'
 import i18n from 'src/i18n'
-import Navigator from 'src/navigator/NavigatorWrapper'
+import NavigatorWrapper from 'src/navigator/NavigatorWrapper'
 import { persistor, store } from 'src/redux/store'
 import Logger from 'src/utils/Logger'
 
-// This is not actually a hook
-// tslint:disable-next-line
-useScreens()
+enableScreens()
 
 Logger.debug('App/init', 'Current Language: ' + i18n.language)
 YellowBox.ignoreWarnings([
@@ -31,8 +29,14 @@ YellowBox.ignoreWarnings([
   'Setting a timer', // warns about long setTimeouts which are actually saga timeouts
 ])
 
-const WrappedNavigator = withTranslation('common')(Navigator)
-WrappedNavigator.displayName = 'WrappedNavigator'
+const { decimalSeparator, groupingSeparator } = getNumberFormatSettings()
+
+BigNumber.config({
+  FORMAT: {
+    decimalSeparator,
+    groupSeparator: groupingSeparator,
+  },
+})
 
 export class App extends React.Component {
   async componentDidMount() {
@@ -59,29 +63,20 @@ export class App extends React.Component {
     store.dispatch(openDeepLink(event.url))
   }
 
-  hideSplashScreen() {
-    SplashScreen.hide()
-  }
-
   render() {
     return (
-      // @ts-ignore Apollo doesn't like the typings
-      <ApolloProvider client={apolloClient}>
-        <Provider store={store}>
-          <SafeAreaProvider>
-            <PersistGate
-              onBeforeLift={this.hideSplashScreen}
-              loading={<AppLoading />}
-              persistor={persistor}
-            >
+      <SafeAreaProvider>
+        <ApolloProvider client={apolloClient}>
+          <Provider store={store}>
+            <PersistGate loading={<AppLoading />} persistor={persistor}>
               <StatusBar backgroundColor={colors.white} barStyle="dark-content" />
               <ErrorBoundary>
-                <WrappedNavigator />
+                <NavigatorWrapper />
               </ErrorBoundary>
             </PersistGate>
-          </SafeAreaProvider>
-        </Provider>
-      </ApolloProvider>
+          </Provider>
+        </ApolloProvider>
+      </SafeAreaProvider>
     )
   }
 }

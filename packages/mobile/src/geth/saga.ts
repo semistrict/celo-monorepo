@@ -1,29 +1,23 @@
-import { AppState, NativeEventEmitter, NativeModules } from 'react-native'
+import { NativeEventEmitter, NativeModules } from 'react-native'
 import { eventChannel } from 'redux-saga'
-import {
-  all,
-  call,
-  cancel,
-  cancelled,
-  delay,
-  fork,
-  put,
-  race,
-  select,
-  take,
-} from 'redux-saga/effects'
-import { Actions, setGethConnected, setInitState, setPromptZeroSync } from 'src/geth/actions'
+import { call, cancel, cancelled, delay, fork, put, race, select, take } from 'redux-saga/effects'
+import { setPromptForno } from 'src/account/actions'
+import { promptFornoIfNeededSelector } from 'src/account/selectors'
+import { waitForRehydrate } from 'src/app/saga'
+import { Actions, setGethConnected, setInitState } from 'src/geth/actions'
 import {
   FailedToFetchGenesisBlockError,
   FailedToFetchStaticNodesError,
   getGeth,
 } from 'src/geth/geth'
 import { InitializationState } from 'src/geth/reducer'
-import { isGethConnectedSelector, promptZeroSyncIfNeededSelector } from 'src/geth/selectors'
+import { isGethConnectedSelector } from 'src/geth/selectors'
 import { navigate, navigateToError } from 'src/navigator/NavigationService'
 import { Screens } from 'src/navigator/Screens'
 import { deleteChainDataAndRestartApp } from 'src/utils/AppRestart'
 import Logger from 'src/utils/Logger'
+import { setContractKitReady } from 'src/web3/actions'
+import { fornoSelector } from 'src/web3/selectors'
 
 const gethEmitter = new NativeEventEmitter(NativeModules.RNGeth)
 
@@ -44,7 +38,6 @@ export function* waitForGethConnectivity() {
   if (connected) {
     return
   }
-
   while (true) {
     const action = yield take(Actions.SET_GETH_CONNECTED)
     if (action.connected) {
@@ -129,8 +122,8 @@ export function* initGethSaga() {
     deleteChainDataAndRestartApp()
   } else {
     // Suggest switch to forno for network-related errors
-    if (yield select(promptZeroSyncIfNeededSelector)) {
-      yield put(setPromptZeroSync(false))
+    if (yield select(promptFornoIfNeededSelector)) {
+      yield put(setPromptForno(false))
       navigate(Screens.DataSaver, { promptModalVisible: true })
     } else {
       navigateToError('networkConnectionFailed')
@@ -183,38 +176,19 @@ function* monitorGeth() {
   }
 }
 
-function createAppStateChannel() {
-  return eventChannel((emit: any) => {
-    AppState.addEventListener('change', emit)
-
-    const removeEventListener = () => {
-      AppState.removeEventListener('change', emit)
-    }
-    return removeEventListener
-  })
-}
-
-function* monitorAppState() {
-  Logger.debug(`${TAG}@monitorAppState`, 'Starting monitor app state saga')
-  const appStateChannel = yield createAppStateChannel()
-  while (true) {
-    try {
-      const newState = yield take(appStateChannel)
-      Logger.debug(`${TAG}@monitorAppState`, `App changed state: ${newState}`)
-    } catch (error) {
-      Logger.error(`${TAG}@monitorAppState`, error)
-    } finally {
-      if (yield cancelled()) {
-        appStateChannel.close()
-      }
-    }
-  }
-}
-
 export function* gethSaga() {
   yield call(initGethSaga)
-  const gethRelatedSagas = yield all([fork(monitorAppState), fork(monitorGeth)])
+  const gethRelatedSagas = yield fork(monitorGeth)
   yield take(Actions.CANCEL_GETH_SAGA)
   yield cancel(gethRelatedSagas)
   yield put(setGethConnected(true))
+}
+
+export function* gethSagaIfNecessary() {
+  yield call(waitForRehydrate) // Wait for rehydrate to know if geth or forno mode
+  yield put(setContractKitReady(true)) // ContractKit is blocked (not ready) before rehydrate
+  if (!(yield select(fornoSelector))) {
+    Logger.debug(`${TAG}@gethSagaIfNecessary`, `Starting geth saga...`)
+    yield call(gethSaga)
+  }
 }

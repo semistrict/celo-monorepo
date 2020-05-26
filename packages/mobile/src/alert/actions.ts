@@ -24,12 +24,6 @@ interface ShowAlertAction {
   underlyingError?: ErrorMessages | null
 }
 
-interface HideAlertAction {
-  type: Actions.HIDE
-}
-
-export type ActionTypes = ShowAlertAction | HideAlertAction
-
 export const showMessage = (
   message: string,
   dismissAfter?: number | null,
@@ -39,11 +33,15 @@ export const showMessage = (
   return showAlert(AlertTypes.MESSAGE, message, dismissAfter, buttonMessage, title)
 }
 
-export const showError = (error: ErrorMessages, dismissAfter?: number): ShowAlertAction => {
+export const showError = (
+  error: ErrorMessages,
+  dismissAfter?: number | null,
+  i18nOptions?: object
+): ShowAlertAction => {
   CeloAnalytics.track(DefaultEventNames.errorDisplayed, { error })
   return showAlert(
     AlertTypes.ERROR,
-    i18n.t(error, { ns: 'global' }),
+    i18n.t(error, { ns: 'global', ...(i18nOptions || {}) }),
     dismissAfter,
     null,
     null,
@@ -70,6 +68,12 @@ const showAlert = (
   }
 }
 
-export const hideAlert = () => ({
+interface HideAlertAction {
+  type: Actions.HIDE
+}
+
+export const hideAlert = (): HideAlertAction => ({
   type: Actions.HIDE,
 })
+
+export type ActionTypes = ShowAlertAction | HideAlertAction

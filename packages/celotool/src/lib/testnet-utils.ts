@@ -1,17 +1,16 @@
-import { StaticNodeUtils } from '@celo/walletkit'
-import { GenesisBlocksGoogleStorageBucketName } from '@celo/walletkit/lib/src/genesis-block-utils'
+import { StaticNodeUtils } from '@celo/contractkit'
+import { GenesisBlocksGoogleStorageBucketName } from '@celo/contractkit/lib/network-utils/genesis-block-utils'
 import { Storage } from '@google-cloud/storage'
 import * as fs from 'fs'
 import fetch from 'node-fetch'
 import * as path from 'path'
-import sleep from 'sleep-promise'
+import { retryCmd } from '../lib/utils'
+import { execCmdWithExitOnFailure } from './cmd-utils'
 import { getGenesisGoogleStorageUrl } from './endpoints'
 import { getEnvFile } from './env-utils'
 import { ensureAuthenticatedGcloudAccount } from './gcloud_utils'
 import { generateGenesisFromEnv } from './generate_utils'
 import { getBootnodeEnode, getEnodesWithExternalIPAddresses } from './geth'
-import { execCmdWithExitOnFailure } from './utils'
-
 const genesisBlocksBucketName = GenesisBlocksGoogleStorageBucketName
 const staticNodesBucketName = StaticNodeUtils.getStaticNodesGoogleStorageBucketName()
 // Someone has taken env_files and I don't even has permission to modify it :/
@@ -20,8 +19,13 @@ const envBucketName = 'env_config_files'
 const bootnodesBucketName = 'env_bootnodes'
 
 // uploads genesis block, static nodes, env file, and bootnode to GCS
-export async function uploadTestnetInfoToGoogleStorage(networkName: string) {
-  await uploadGenesisBlockToGoogleStorage(networkName)
+export async function uploadTestnetInfoToGoogleStorage(
+  networkName: string,
+  uploadGenesis: boolean
+) {
+  if (uploadGenesis) {
+    await uploadGenesisBlockToGoogleStorage(networkName)
+  }
   await uploadStaticNodesToGoogleStorage(networkName)
   await uploadBootnodeToGoogleStorage(networkName)
   await uploadEnvFileToGoogleStorage(networkName)
@@ -42,7 +46,7 @@ export async function uploadGenesisBlockToGoogleStorage(networkName: string) {
 
 export async function getGenesisBlockFromGoogleStorage(networkName: string) {
   const resp = await fetch(getGenesisGoogleStorageUrl(networkName))
-  return resp.json()
+  return JSON.stringify(await resp.json())
 }
 
 // This will throw an error if it fails to upload
@@ -107,29 +111,6 @@ export async function uploadEnvFileToGoogleStorage(networkName: string) {
     false /* keep file private */,
     'text/plain'
   )
-}
-
-async function retryCmd(
-  cmd: () => Promise<any>,
-  numAttempts: number = 100,
-  maxTimeoutMs: number = 15000
-) {
-  for (let i = 1; i <= numAttempts; i++) {
-    try {
-      const result = await cmd()
-      return result
-    } catch (error) {
-      const sleepTimeBasisInMs = 1000
-      const sleepTimeInMs = Math.min(sleepTimeBasisInMs * Math.pow(2, i), maxTimeoutMs)
-      console.warn(
-        `${new Date().toLocaleTimeString()} Retry attempt: ${i}/${numAttempts}, ` +
-          `retry after sleeping for ${sleepTimeInMs} milli-seconds`,
-        error
-      )
-      await sleep(sleepTimeInMs)
-    }
-  }
-  return null
 }
 
 async function getGoogleCloudUserInfo(): Promise<string> {

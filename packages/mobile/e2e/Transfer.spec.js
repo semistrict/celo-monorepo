@@ -1,4 +1,4 @@
-import { enterPin, skipTo, sleep } from './utils'
+import { skipTo, sleep } from './utils'
 
 const ENABLE_CONTACT_IMPORT = false
 
@@ -29,8 +29,8 @@ async function bannerDismiss(inElement, tapElement) {
 
 describe('Transfer Works', () => {
   beforeEach(async () => {
-    bannerDismiss(by.id('errorBanner'))
-    bannerDismiss(by.id('SmartTopAlertButton'))
+    await bannerDismiss(by.id('errorBanner'))
+    await bannerDismiss(by.id('SmartTopAlertButton'))
   })
 
   it('NUX->Language', async () => {
@@ -45,7 +45,7 @@ describe('Transfer Works', () => {
 
     await element(by.id('NameEntry')).replaceText(EXAMPLE_NAME)
 
-    await element(by.id('CountryNameField')).replaceText(VERIFICATION_COUNTRY)
+    await element(by.id('CountryNameFieldTextInput')).replaceText(VERIFICATION_COUNTRY)
 
     await expect(element(by.id('PhoneNumberField'))).toBeVisible()
     await element(by.id('PhoneNumberField')).replaceText(VERIFICATION_PHONE_NUMBER)
@@ -53,10 +53,17 @@ describe('Transfer Works', () => {
     await element(by.id('JoinCeloContinueButton')).tap()
   })
 
+  it('NUX-Terms', async () => {
+    await element(by.id('scrollView')).scrollTo('bottom')
+    expect(element(by.id('AcceptTermsButton'))).toBeVisible()
+    await element(by.id('AcceptTermsButton')).tap()
+  })
+
   it('NUX->Pin', async () => {
     await expect(element(by.id('SystemAuthTitle'))).toBeVisible()
     await expect(element(by.id('SystemAuthContinue'))).toBeVisible()
-    enterPin()
+
+    // TODO: enter pin using custom keypad
 
     await element(by.id('SystemAuthContinue')).tap()
   })

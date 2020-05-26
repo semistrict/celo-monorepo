@@ -3,14 +3,11 @@ import colors from '@celo/react-components/styles/colors'
 import { throttle } from 'lodash'
 import * as React from 'react'
 import { WithTranslation } from 'react-i18next'
-import { StyleSheet } from 'react-native'
-import SafeAreaView from 'react-native-safe-area-view'
-import { NavigationInjectedProps } from 'react-navigation'
+import { StyleSheet, View } from 'react-native'
 import { connect } from 'react-redux'
 import { hideAlert, showError } from 'src/alert/actions'
 import CeloAnalytics from 'src/analytics/CeloAnalytics'
 import { CustomEventNames } from 'src/analytics/constants'
-import { componentWithAnalytics } from 'src/analytics/wrapper'
 import { ErrorMessages } from 'src/app/ErrorMessages'
 import { estimateFee, FeeType } from 'src/fees/actions'
 import i18n, { Namespaces, withTranslation } from 'src/i18n'
@@ -30,7 +27,6 @@ import RecipientPicker from 'src/recipients/RecipientPicker'
 import { recipientCacheSelector } from 'src/recipients/reducer'
 import { RootState } from 'src/redux/reducers'
 import { storeLatestInRecents } from 'src/send/actions'
-import { ContactSyncBanner } from 'src/send/ContactSyncBanner'
 import { QRCodeIcon } from 'src/send/QRCodeIcon'
 import { SendCallToAction } from 'src/send/SendCallToAction'
 import { SendSearchInput } from 'src/send/SendSearchInput'
@@ -80,7 +76,7 @@ interface DispatchProps {
   estimateFee: typeof estimateFee
 }
 
-type Props = StateProps & DispatchProps & WithTranslation & NavigationInjectedProps
+type Props = StateProps & DispatchProps & WithTranslation
 
 const mapStateToProps = (state: RootState): StateProps => ({
   defaultCountryCode: state.account.defaultCountryCode,
@@ -261,7 +257,6 @@ class Send extends React.Component<Props, State> {
             onPressCta={this.onPressContactsSettings}
           />
         )}
-        <ContactSyncBanner />
       </>
     )
   }
@@ -271,7 +266,9 @@ class Send extends React.Component<Props, State> {
     const { searchQuery } = this.state
 
     return (
-      <SafeAreaView style={style.body}>
+      // Intentionally not using SafeAreaView here as RecipientPicker
+      // needs fullscreen rendering
+      <View style={style.body}>
         <DisconnectBanner />
         <SendSearchInput isPhoneEnabled={numberVerified} onChangeText={this.onSearchQueryChanged} />
         <RecipientPicker
@@ -282,7 +279,7 @@ class Send extends React.Component<Props, State> {
           listHeaderComponent={this.renderListHeader}
           onSelectRecipient={this.onSelectRecipient}
         />
-      </SafeAreaView>
+      </View>
     )
   }
 }
@@ -305,9 +302,7 @@ const style = StyleSheet.create({
   },
 })
 
-export default componentWithAnalytics(
-  connect<StateProps, DispatchProps, {}, RootState>(
-    mapStateToProps,
-    mapDispatchToProps
-  )(withTranslation(Namespaces.sendFlow7)(Send))
-)
+export default connect<StateProps, DispatchProps, {}, RootState>(
+  mapStateToProps,
+  mapDispatchToProps
+)(withTranslation(Namespaces.sendFlow7)(Send))

@@ -5,7 +5,7 @@ import { connect } from 'react-redux'
 import { PaymentRequest } from 'src/account/types'
 import CeloAnalytics from 'src/analytics/CeloAnalytics'
 import { CustomEventNames } from 'src/analytics/constants'
-import { updatePaymentRequestNotified, updatePaymentRequestStatus } from 'src/firebase/actions'
+import { cancelPaymentRequest, updatePaymentRequestNotified } from 'src/firebase/actions'
 import { Namespaces, withTranslation } from 'src/i18n'
 import {
   addressToE164NumberSelector,
@@ -15,11 +15,12 @@ import {
 } from 'src/identity/reducer'
 import { sendDollar } from 'src/images/Images'
 import { navigate } from 'src/navigator/NavigationService'
-import { Stacks } from 'src/navigator/Screens'
+import { Screens } from 'src/navigator/Screens'
 import SummaryNotification from 'src/notifications/SummaryNotification'
 import { listItemRenderer } from 'src/paymentRequest/OutgoingPaymentRequestListScreen'
 import PaymentRequestNotificationInner from 'src/paymentRequest/PaymentRequestNotificationInner'
-import { NumberToRecipient, phoneNumberToRecipient } from 'src/recipients/recipient'
+import { getSenderFromPaymentRequest } from 'src/paymentRequest/utils'
+import { NumberToRecipient } from 'src/recipients/recipient'
 import { recipientCacheSelector } from 'src/recipients/reducer'
 import { RootState } from 'src/redux/reducers'
 
@@ -28,17 +29,17 @@ interface OwnProps {
 }
 
 interface DispatchProps {
-  updatePaymentRequestStatus: typeof updatePaymentRequestStatus
+  cancelPaymentRequest: typeof cancelPaymentRequest
   updatePaymentRequestNotified: typeof updatePaymentRequestNotified
 }
-
-type Props = OwnProps & DispatchProps & WithTranslation & StateProps
 
 interface StateProps {
   e164PhoneNumberAddressMapping: E164NumberToAddressType
   addressToE164Number: AddressToE164NumberType
   recipientCache: NumberToRecipient
 }
+
+type Props = OwnProps & DispatchProps & WithTranslation & StateProps
 
 const mapStateToProps = (state: RootState): StateProps => ({
   e164PhoneNumberAddressMapping: e164NumberToAddressSelector(state),
@@ -50,15 +51,7 @@ const mapStateToProps = (state: RootState): StateProps => ({
 export class OutgoingPaymentRequestSummaryNotification extends React.Component<Props> {
   onReview = () => {
     CeloAnalytics.track(CustomEventNames.outgoing_request_payment_review)
-    navigate(Stacks.OutgoingRequestStack)
-  }
-
-  getRequesterRecipient = (requesterE164Number: string) => {
-    return phoneNumberToRecipient(
-      requesterE164Number,
-      this.props.e164PhoneNumberAddressMapping[requesterE164Number],
-      this.props.recipientCache
-    )
+    navigate(Screens.OutgoingPaymentRequestListScreen)
   }
 
   itemRenderer = (item: PaymentRequest) => {
@@ -66,8 +59,11 @@ export class OutgoingPaymentRequestSummaryNotification extends React.Component<P
       <PaymentRequestNotificationInner
         key={item.uid}
         amount={item.amount}
-        requesterE164Number={item.requesterE164Number}
-        requesterRecipient={this.getRequesterRecipient(item.requesterE164Number)}
+        recipient={getSenderFromPaymentRequest(
+          item,
+          this.props.addressToE164Number,
+          this.props.recipientCache
+        )}
       />
     )
   }
@@ -77,14 +73,16 @@ export class OutgoingPaymentRequestSummaryNotification extends React.Component<P
     return requests.length === 1 ? (
       listItemRenderer({
         addressToE164Number: this.props.addressToE164Number,
-        updatePaymentRequestStatus: this.props.updatePaymentRequestStatus,
-        updatePaymentRequestNotified: this.props.updatePaymentRequestNotified,
         recipientCache,
+        // accessing via this.props.<...> to avoid shadowing
+        cancelPaymentRequest: this.props.cancelPaymentRequest,
+        updatePaymentRequestNotified: this.props.updatePaymentRequestNotified,
       })(requests[0])
     ) : (
       <SummaryNotification<PaymentRequest>
         items={requests}
-        title={t('outgoingPaymentRequests')}
+        title={t('outgoingPaymentRequestsSummaryTitle', { count: requests.length })}
+        detailsI18nKey="walletFlow5:outgoingPaymentRequestsSummaryDetails"
         icon={<Image source={sendDollar} style={styles.image} resizeMode="contain" />}
         onReview={this.onReview}
         itemRenderer={this.itemRenderer}
@@ -101,6 +99,6 @@ const styles = StyleSheet.create({
 })
 
 export default connect<StateProps, DispatchProps, {}, RootState>(mapStateToProps, {
-  updatePaymentRequestStatus,
+  cancelPaymentRequest,
   updatePaymentRequestNotified,
 })(withTranslation(Namespaces.walletFlow5)(OutgoingPaymentRequestSummaryNotification))

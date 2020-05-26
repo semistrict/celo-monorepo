@@ -8,37 +8,108 @@ exports[`EscrowedPaymentReminderNotification renders correctly 1`] = `
     }
   }
 >
-  <View>
-    <View
-      style={
+  <View
+    style={
+      Array [
+        Object {
+          "backgroundColor": "#FFFFFF",
+          "elevation": 12,
+          "padding": 16,
+          "shadowColor": "black",
+          "shadowOffset": Object {
+            "height": 6,
+            "width": 0,
+          },
+          "shadowOpacity": 0.3,
+          "shadowRadius": 9.600000000000001,
+        },
+        Object {
+          "borderRadius": 8,
+        },
         Array [
           Object {
-            "backgroundColor": "#FFFFFF",
-            "flexDirection": "row",
-            "justifyContent": "space-between",
-            "padding": 16,
-            "width": "100%",
+            "height": 144,
           },
-          Object {
-            "elevation": 2,
-            "shadowColor": "black",
-            "shadowOffset": Object {
-              "height": 1,
-              "width": 0,
-            },
-            "shadowOpacity": 0.3,
-            "shadowRadius": 1.6,
-          },
-        ]
+          Object {},
+        ],
+      ]
+    }
+    testID="EscrowedPaymentListItem"
+  >
+    <View
+      style={
+        Object {
+          "flex": 1,
+          "flexDirection": "row",
+        }
       }
     >
       <View
         style={
           Object {
-            "alignItems": "center",
-            "paddingRight": 16,
+            "flex": 1,
+            "marginRight": 16,
           }
         }
+      >
+        <Text
+          numberOfLines={2}
+          style={
+            Object {
+              "color": "#9CA4A9",
+              "fontFamily": "Inter-Regular",
+              "fontSize": 13,
+              "lineHeight": 16,
+              "marginBottom": 4,
+            }
+          }
+          testID="EscrowedPaymentListItem/Title"
+        >
+          escrowPaymentNotificationTitle
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={
+            Object {
+              "color": "#2E3338",
+              "fontFamily": "Inter-SemiBold",
+              "fontSize": 24,
+              "lineHeight": 28,
+              "marginBottom": 2,
+            }
+          }
+          testID="EscrowedPaymentListItem/Amount"
+        >
+          <Text
+            numberOfLines={1}
+            style={
+              Array [
+                undefined,
+                Object {
+                  "color": undefined,
+                },
+              ]
+            }
+          >
+            
+            $
+            0.00
+          </Text>
+        </Text>
+        <Text
+          style={
+            Object {
+              "color": "#2E3338",
+              "fontFamily": "Inter-Regular",
+              "fontSize": 14,
+              "lineHeight": 18,
+            }
+          }
+          testID="EscrowedPaymentListItem/Details"
+        />
+      </View>
+      <View
+        style={Object {}}
       >
         <Image
           resizeMode="contain"
@@ -55,129 +126,78 @@ exports[`EscrowedPaymentReminderNotification renders correctly 1`] = `
           }
         />
       </View>
+    </View>
+    <View
+      style={
+        Object {
+          "flexDirection": "row",
+        }
+      }
+      testID="EscrowedPaymentListItem/CallToActions"
+    >
       <View
-        style={
+        accessible={true}
+        focusable={true}
+        nativeBackgroundAndroid={
           Object {
-            "flex": 1,
-            "justifyContent": "space-between",
+            "attribute": "selectableItemBackgroundBorderless",
+            "type": "ThemeAttrAndroid",
           }
         }
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        testID="EscrowedPaymentListItem/CallToActions/global:remind/Button"
       >
         <Text
           style={
             Object {
-              "color": "#81868B",
-              "fontFamily": "Hind-Regular",
+              "color": "#1AB775",
+              "fontFamily": "Inter-SemiBold",
               "fontSize": 14,
-              "lineHeight": 18,
+              "lineHeight": 16,
+              "marginRight": 24,
             }
           }
         >
-          escrowPaymentNotificationTitle
+          global:remind
         </Text>
-        <View
+      </View>
+      <View
+        accessible={true}
+        focusable={true}
+        nativeBackgroundAndroid={
+          Object {
+            "attribute": "selectableItemBackgroundBorderless",
+            "type": "ThemeAttrAndroid",
+          }
+        }
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        testID="EscrowedPaymentListItem/CallToActions/global:reclaim/Button"
+      >
+        <Text
           style={
             Object {
-              "justifyContent": "space-between",
-              "minHeight": 60,
-              "paddingTop": 8,
+              "color": "#1AB775",
+              "fontFamily": "Inter-SemiBold",
+              "fontSize": 14,
+              "lineHeight": 16,
+              "marginRight": 24,
             }
           }
         >
-          <Text
-            style={
-              Object {
-                "color": "#2E3338",
-                "fontFamily": "Hind-Regular",
-                "fontSize": 14,
-                "lineHeight": 18,
-              }
-            }
-          >
-            defaultComment
-          </Text>
-          <View
-            style={
-              Object {
-                "flexDirection": "row",
-                "marginTop": 5,
-              }
-            }
-          >
-            <View
-              accessible={true}
-              focusable={true}
-              isTVSelectable={true}
-              nativeBackgroundAndroid={
-                Object {
-                  "attribute": "selectableItemBackgroundBorderless",
-                  "type": "ThemeAttrAndroid",
-                }
-              }
-              onClick={[Function]}
-              onResponderGrant={[Function]}
-              onResponderMove={[Function]}
-              onResponderRelease={[Function]}
-              onResponderTerminate={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
-            >
-              <Text
-                style={
-                  Array [
-                    Object {
-                      "color": "#42D689",
-                      "fontFamily": "Hind-SemiBold",
-                      "fontSize": 14,
-                      "lineHeight": 18,
-                    },
-                    Object {
-                      "paddingEnd": 15,
-                    },
-                  ]
-                }
-              >
-                global:remind
-              </Text>
-            </View>
-            <View
-              accessible={true}
-              focusable={true}
-              isTVSelectable={true}
-              nativeBackgroundAndroid={
-                Object {
-                  "attribute": "selectableItemBackgroundBorderless",
-                  "type": "ThemeAttrAndroid",
-                }
-              }
-              onClick={[Function]}
-              onResponderGrant={[Function]}
-              onResponderMove={[Function]}
-              onResponderRelease={[Function]}
-              onResponderTerminate={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
-            >
-              <Text
-                style={
-                  Array [
-                    Object {
-                      "color": "#42D689",
-                      "fontFamily": "Hind-SemiBold",
-                      "fontSize": 14,
-                      "lineHeight": 18,
-                    },
-                    Object {
-                      "paddingEnd": 15,
-                    },
-                  ]
-                }
-              >
-                global:reclaim
-              </Text>
-            </View>
-          </View>
-        </View>
+          global:reclaim
+        </Text>
       </View>
     </View>
   </View>

@@ -1,5 +1,10 @@
 import { CeloContractName } from '@celo/protocol/lib/registry-utils'
-import { assertContainSubset, assertRevert, jsonRpc } from '@celo/protocol/lib/test-utils'
+import {
+  assertContainSubset,
+  assertRevert,
+  getFirstBlockNumberForEpoch,
+  jsonRpc,
+} from '@celo/protocol/lib/test-utils'
 import BigNumber from 'bignumber.js'
 import {
   AccountsContract,
@@ -161,7 +166,7 @@ contract('DowntimeSlasher', (accounts: string[]) => {
       await slasher.setNumberValidators(2)
       // when epoch-2 changes to epoch-1, the validator to be slashed is down, but our signer number changes
       // another validator is up around the epoch change
-      changeBlock = (epoch - 1) * 100 - 3
+      changeBlock = getFirstBlockNumberForEpoch(epoch - 1) - 3
       async function prepareBlock(bn) {
         const parentEpoch = (await slasher.getEpochNumberOfBlock(bn - 1)).toNumber()
         await slasher.setParentSealBitmap(bn, parentEpoch === epoch - 2 ? bitmap3 : bitmap2)
@@ -180,6 +185,29 @@ contract('DowntimeSlasher', (accounts: string[]) => {
       const balance = await mockLockedGold.accountTotalLockedGold(validator)
       assert.equal(balance.toNumber(), 40000)
     })
+    it('should emit the corresponding event', async () => {
+      const resp = await slasher.slash(
+        startBlock,
+        validatorIndex,
+        validatorIndex,
+        0,
+        [],
+        [],
+        [],
+        [],
+        [],
+        []
+      )
+      const log = resp.logs[0]
+      assertContainSubset(log, {
+        event: 'DowntimeSlashPerformed',
+        args: {
+          validator,
+          startBlock: new BigNumber(startBlock),
+        },
+      })
+    })
+
     it('decrements gold when success', async () => {
       await slasher.slash(startBlock, validatorIndex, validatorIndex, 0, [], [], [], [], [], [])
       const balance = await mockLockedGold.accountTotalLockedGold(validator)

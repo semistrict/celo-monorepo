@@ -1,13 +1,11 @@
 import React from 'react'
 import { WithTranslation } from 'react-i18next'
 import { View } from 'react-native'
-import { NavigationInjectedProps } from 'react-navigation'
 import { connect } from 'react-redux'
 import { getOutgoingPaymentRequests } from 'src/account/selectors'
 import { PaymentRequest } from 'src/account/types'
-import { updatePaymentRequestNotified, updatePaymentRequestStatus } from 'src/firebase/actions'
+import { cancelPaymentRequest, updatePaymentRequestNotified } from 'src/firebase/actions'
 import i18n, { Namespaces, withTranslation } from 'src/i18n'
-import { fetchPhoneAddresses } from 'src/identity/actions'
 import {
   AddressToE164NumberType,
   e164NumberToAddressSelector,
@@ -16,7 +14,6 @@ import {
 import {
   NotificationList,
   titleWithBalanceNavigationOptions,
-  useBalanceInNavigationParam,
 } from 'src/notifications/NotificationList'
 import OutgoingPaymentRequestListItem from 'src/paymentRequest/OutgoingPaymentRequestListItem'
 import { getSenderFromPaymentRequest } from 'src/paymentRequest/utils'
@@ -33,9 +30,8 @@ interface StateProps {
 }
 
 interface DispatchProps {
-  updatePaymentRequestStatus: typeof updatePaymentRequestStatus
+  cancelPaymentRequest: typeof cancelPaymentRequest
   updatePaymentRequestNotified: typeof updatePaymentRequestNotified
-  fetchPhoneAddresses: typeof fetchPhoneAddresses
 }
 
 const mapStateToProps = (state: RootState): StateProps => ({
@@ -46,12 +42,12 @@ const mapStateToProps = (state: RootState): StateProps => ({
   addressToE164Number: state.identity.addressToE164Number,
 })
 
-type Props = NavigationInjectedProps & WithTranslation & StateProps & DispatchProps
+type Props = WithTranslation & StateProps & DispatchProps
 
 export const listItemRenderer = (params: {
   recipientCache: NumberToRecipient
   addressToE164Number: AddressToE164NumberType
-  updatePaymentRequestStatus: typeof updatePaymentRequestStatus
+  cancelPaymentRequest: typeof cancelPaymentRequest
   updatePaymentRequestNotified: typeof updatePaymentRequestNotified
 }) => (request: PaymentRequest, key: number | undefined = undefined) => {
   const requestee = getSenderFromPaymentRequest(
@@ -64,18 +60,16 @@ export const listItemRenderer = (params: {
       <OutgoingPaymentRequestListItem
         id={request.uid || ''}
         amount={request.amount}
-        updatePaymentRequestStatus={params.updatePaymentRequestStatus}
-        updatePaymentRequestNotified={params.updatePaymentRequestNotified}
         requestee={requestee}
         comment={request.comment}
+        cancelPaymentRequest={params.cancelPaymentRequest}
+        updatePaymentRequestNotified={params.updatePaymentRequestNotified}
       />
     </View>
   )
 }
 
 const OutgoingPaymentRequestListScreen = (props: Props) => {
-  const { dollarBalance, navigation } = props
-  useBalanceInNavigationParam(dollarBalance, navigation)
   return (
     <NotificationList
       items={props.paymentRequests}
@@ -90,7 +84,6 @@ OutgoingPaymentRequestListScreen.navigationOptions = titleWithBalanceNavigationO
 )
 
 export default connect<StateProps, DispatchProps, {}, RootState>(mapStateToProps, {
-  updatePaymentRequestStatus,
+  cancelPaymentRequest,
   updatePaymentRequestNotified,
-  fetchPhoneAddresses,
 })(withTranslation(Namespaces.paymentRequestFlow)(OutgoingPaymentRequestListScreen))

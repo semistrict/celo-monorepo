@@ -2,13 +2,14 @@ import { Address } from '@celo/contractkit'
 import { AccountsWrapper } from '@celo/contractkit/lib/wrappers/Accounts'
 import { GovernanceWrapper, ProposalStage } from '@celo/contractkit/lib/wrappers/Governance'
 import { LockedGoldWrapper } from '@celo/contractkit/lib/wrappers/LockedGold'
+import { MultiSigWrapper } from '@celo/contractkit/lib/wrappers/MultiSig'
 import { ValidatorsWrapper } from '@celo/contractkit/lib/wrappers/Validators'
-import { eqAddress } from '@celo/utils/lib/address'
+import { eqAddress, NULL_ADDRESS } from '@celo/utils/lib/address'
 import { verifySignature } from '@celo/utils/lib/signatureUtils'
 import BigNumber from 'bignumber.js'
 import chalk from 'chalk'
 import { BaseCommand } from '../base'
-import { printValueMap } from './cli'
+import { printValueMapRecursive } from './cli'
 
 export interface CommandCheck {
   name: string
@@ -41,20 +42,24 @@ class CheckBuilder {
 
   constructor(private cmd: BaseCommand, private signer?: Address) {}
 
+  get web3() {
+    return this.cmd.web3
+  }
+
   get kit() {
     return this.cmd.kit
   }
 
   withValidators<A>(
-    f: (validators: ValidatorsWrapper, signer: Address, account: Address) => A
+    f: (validators: ValidatorsWrapper, signer: Address, account: Address, ctx: CheckBuilder) => A
   ): () => Promise<Resolve<A>> {
     return async () => {
       const validators = await this.kit.contracts.getValidators()
       if (this.signer) {
         const account = await validators.signerToAccount(this.signer)
-        return f(validators, this.signer, account) as Resolve<A>
+        return f(validators, this.signer, account, this) as Resolve<A>
       } else {
-        return f(validators, '', '') as Resolve<A>
+        return f(validators, '', '', this) as Resolve<A>
       }
     }
   }
@@ -86,15 +91,29 @@ class CheckBuilder {
     }
   }
 
-  withGovernance<A>(f: (accounts: GovernanceWrapper) => A): () => Promise<Resolve<A>> {
+  withGovernance<A>(
+    f: (governance: GovernanceWrapper, signer: Address, account: Address, ctx: CheckBuilder) => A
+  ): () => Promise<Resolve<A>> {
     return async () => {
       const governance = await this.kit.contracts.getGovernance()
-      return f(governance) as Resolve<A>
+      return f(governance, '', '', this) as Resolve<A>
     }
   }
 
   addCheck(name: string, predicate: () => Promise<boolean> | boolean, errorMessage?: string) {
     this.checks.push(check(name, predicate, errorMessage))
+    return this
+  }
+
+  addConditionalCheck(
+    name: string,
+    runCondition: boolean,
+    predicate: () => Promise<boolean> | boolean,
+    errorMessage?: string
+  ) {
+    if (runCondition) {
+      return this.addCheck(name, predicate, errorMessage)
+    }
     return this
   }
 
@@ -116,8 +135,8 @@ class CheckBuilder {
       this.withGovernance(async (g) => {
         const match = (await g.getProposalStage(proposalID)) === stage
         if (!match) {
-          const waitTimes = await g.timeUntilStages(proposalID)
-          printValueMap(waitTimes)
+          const timeUntilStages = await g.timeUntilStages(proposalID)
+          printValueMapRecursive({ timeUntilStages })
         }
         return match
       })
@@ -131,13 +150,13 @@ class CheckBuilder {
 
   hotfixIsPassing = (hash: Buffer) =>
     this.addCheck(
-      `Hotfix ${hash} is whitelisted by quorum of validators`,
+      `Hotfix 0x${hash.toString('hex')} is whitelisted by quorum of validators`,
       this.withGovernance((g) => g.isHotfixPassing(hash))
     )
 
   hotfixNotExecuted = (hash: Buffer) =>
     this.addCheck(
-      `Hotfix ${hash} is not already executed`,
+      `Hotfix 0x${hash.toString('hex')} is not already executed`,
       this.withGovernance(async (g) => !(await g.getHotfixRecord(hash)).executed)
     )
 
@@ -246,7 +265,7 @@ class CheckBuilder {
       `${this.signer!} is vote signer or registered account`,
       this.withAccounts(async (accs) => {
         return accs.voteSignerToAccount(this.signer!).then(
-          () => true,
+          (addr) => !eqAddress(addr, NULL_ADDRESS),
           () => false
         )
       })
@@ -259,9 +278,16 @@ class CheckBuilder {
       `${address} is not registered as an account. Try running account:register`
     )
 
+  isNotVoting = (address: Address) =>
+    this.addCheck(
+      `${address} is not currently voting on a governance proposal`,
+      this.withGovernance((gov) => negate(gov.isVoting(address))),
+      `${address} is currently voting in governance. Revoke your upvotes or wait for the referendum to end.`
+    )
+
   hasEnoughGold = (account: Address, value: BigNumber) => {
     const valueInEth = this.kit.web3.utils.fromWei(value.toFixed(), 'ether')
-    return this.addCheck(`Account has at least ${valueInEth} cGold`, () =>
+    return this.addCheck(`Account has at least ${valueInEth} cGLD`, () =>
       this.kit.contracts
         .getGoldToken()
         .then((gt) => gt.balanceOf(account))
@@ -273,6 +299,12 @@ class CheckBuilder {
     this.addCheck(
       `Deposit is greater than or equal to governance proposal minDeposit`,
       this.withGovernance(async (g) => deposit.gte(await g.minDeposit()))
+    )
+
+  hasRefundedDeposits = (account: Address) =>
+    this.addCheck(
+      `${account} has refunded governance deposits`,
+      this.withGovernance(async (g) => !(await g.getRefundedDeposits(account)).isZero())
     )
 
   hasEnoughLockedGold = (value: BigNumber) => {
@@ -312,6 +344,9 @@ class CheckBuilder {
       `Account isn't a member of a validator group`,
       this.withValidators(async (v, _signer, account) => {
         const { affiliation } = await v.getValidator(account)
+        if (!affiliation || eqAddress(affiliation, NULL_ADDRESS)) {
+          return true
+        }
         const { members } = await v.getValidatorGroup(affiliation!)
         return !members.includes(account)
       })
@@ -326,9 +361,46 @@ class CheckBuilder {
           account
         )
         const { duration } = await v.getValidatorLockedGoldRequirements()
-        return duration.toNumber() + lastRemovedFromGroupTimestamp < Date.now()
+        return duration.toNumber() + lastRemovedFromGroupTimestamp < Date.now() / 1000
       })
     )
+  }
+
+  resetSlashingmultiplierPeriodPassed = () => {
+    return this.addCheck(
+      `Enough time has passed since the last halving of the slashing multiplier`,
+      this.withValidators(async (v, _signer, account) => {
+        const { lastSlashed } = await v.getValidatorGroup(account)
+        const duration = await v.getSlashingMultiplierResetPeriod()
+        return duration.toNumber() + lastSlashed.toNumber() < Date.now() / 1000
+      })
+    )
+  }
+
+  hasACommissionUpdateQueued = () =>
+    this.addCheck(
+      "There's a commision update queued",
+      this.withValidators(async (v, _signer, account) => {
+        const vg = await v.getValidatorGroup(account)
+        return !vg.nextCommissionBlock.eq(0)
+      })
+    )
+
+  hasCommissionUpdateDelayPassed = () =>
+    this.addCheck(
+      'The Commission update delay has already passed',
+      this.withValidators(async (v, _signer, account, ctx) => {
+        const blockNumber = await ctx.web3.eth.getBlockNumber()
+        const vg = await v.getValidatorGroup(account)
+        return vg.nextCommissionBlock.lte(blockNumber)
+      })
+    )
+
+  isMultiSigOwner = (from: string, multisig: MultiSigWrapper) => {
+    return this.addCheck('The provided address is an owner of the multisig', async () => {
+      const owners = await multisig.getOwners()
+      return owners.indexOf(from) > -1
+    })
   }
 
   async runChecks() {

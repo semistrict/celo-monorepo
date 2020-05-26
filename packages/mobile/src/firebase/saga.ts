@@ -1,5 +1,5 @@
-import firebase from 'react-native-firebase'
-import { DataSnapshot } from 'react-native-firebase/database'
+import firebase from '@react-native-firebase/app'
+import { FirebaseDatabaseTypes } from '@react-native-firebase/database'
 import { eventChannel } from 'redux-saga'
 import {
   all,
@@ -20,6 +20,8 @@ import {
 } from 'src/account/actions'
 import { PaymentRequest, PaymentRequestStatus } from 'src/account/types'
 import { showError } from 'src/alert/actions'
+import CeloAnalytics from 'src/analytics/CeloAnalytics'
+import { CustomEventNames } from 'src/analytics/constants'
 import { Actions as AppActions, SetLanguage } from 'src/app/actions'
 import { ErrorMessages } from 'src/app/ErrorMessages'
 import { FIREBASE_ENABLED } from 'src/config'
@@ -27,9 +29,11 @@ import { updateCeloGoldExchangeRateHistory } from 'src/exchange/actions'
 import { exchangeHistorySelector, ExchangeRate, MAX_HISTORY_RETENTION } from 'src/exchange/reducer'
 import {
   Actions,
+  CancelPaymentRequestAction,
+  CompletePaymentRequestAction,
+  DeclinePaymentRequestAction,
   firebaseAuthorized,
   UpdatePaymentRequestNotifiedAction,
-  UpdatePaymentRequestStatusAction,
 } from 'src/firebase/actions'
 import {
   initializeAuth,
@@ -93,7 +97,7 @@ function createPaymentRequestChannel(address: string, addressKeyField: ADDRESS_K
   }
 
   return eventChannel((emit: any) => {
-    const emitter = (data: DataSnapshot) => {
+    const emitter = (data: FirebaseDatabaseTypes.DataSnapshot) => {
       if (data.toJSON()) {
         emit(data.toJSON())
       }
@@ -162,7 +166,21 @@ function* subscribeToOutgoingPaymentRequests() {
   yield subscribeToPaymentRequests(REQUESTER_ADDRESS, updateOutgoingPaymentRequests)
 }
 
-function* updatePaymentRequestStatus({ id, status }: UpdatePaymentRequestStatusAction) {
+function* updatePaymentRequestStatus({
+  id,
+  status,
+}: (DeclinePaymentRequestAction | CompletePaymentRequestAction) | CancelPaymentRequestAction) {
+  switch (status) {
+    case PaymentRequestStatus.DECLINED:
+      CeloAnalytics.track(CustomEventNames.incoming_request_payment_decline)
+      break
+    case PaymentRequestStatus.COMPLETED:
+      CeloAnalytics.track(CustomEventNames.incoming_request_payment_pay)
+      break
+    case PaymentRequestStatus.CANCELLED:
+      CeloAnalytics.track(CustomEventNames.outgoing_request_payment_cancel)
+      break
+  }
   try {
     Logger.debug(TAG, 'Updating payment request', id, `status: ${status}`)
     yield call(() =>
@@ -228,9 +246,9 @@ function celoGoldExchangeRateHistoryChannel(latestExchangeRate: ExchangeRate) {
   const now = Date.now()
 
   return eventChannel((emit: any) => {
-    const emitter = (snapshot: DataSnapshot) => {
+    const emitter = (snapshot: FirebaseDatabaseTypes.DataSnapshot) => {
       const result: ExchangeRate[] = []
-      snapshot.forEach((childSnapshot) => {
+      snapshot.forEach((childSnapshot: FirebaseDatabaseTypes.DataSnapshot) => {
         result.push(childSnapshot.val())
         return false
       })

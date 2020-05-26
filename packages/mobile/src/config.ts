@@ -30,6 +30,8 @@ export const DEV_SETTINGS_ACTIVE_INITIALLY = stringToBoolean(
 )
 
 // VALUES
+export const GAS_INFLATION_FACTOR = 1.5 // Used when estimating gas for txs
+export const GAS_PRICE_INFLATION_FACTOR = 5 // Used when getting gas price, must match what Geth does
 export const BALANCE_OUT_OF_SYNC_THRESHOLD = 5 * 60 // 5 minutes
 export const ALERT_BANNER_DURATION = 5000
 export const NUMBER_INPUT_MAX_DECIMALS = 2
@@ -39,9 +41,11 @@ export const INPUT_DEBOUNCE_TIME = 1000 // milliseconds
 export const DOLLAR_TRANSACTION_MIN_AMOUNT = 0.01
 export const GOLD_TRANSACTION_MIN_AMOUNT = 0.001
 // The number of seconds before the sender can reclaim the payment.
-export const ESCROW_PAYMENT_EXPIRY_SECONDS = 172800 // 2 days
+export const ESCROW_PAYMENT_EXPIRY_SECONDS = 86400 // 1 days
 // We need to fallback to `integration` for testing under jest where react-native-config is undefined.
 export const DEFAULT_TESTNET = Config.DEFAULT_TESTNET || 'integration'
+export const DAILY_PAYMENT_LIMIT_CUSD = 500
+export const SMS_RETRIEVER_APP_SIGNATURE = Config.SMS_RETRIEVER_APP_SIGNATURE
 
 // LINKS
 export const CELO_VERIFIER_DOWNLOAD_LINK = 'https://celo.org/rewards'
@@ -50,6 +54,7 @@ export const CELO_FAUCET_LINK = 'https://celo.org/app'
 export const CELO_TERMS_LINK = 'https://celo.org/terms'
 export const TOS_LINK = 'https://celo.org/user-agreement'
 export const FAQ_LINK = 'https://celo.org/faq'
+export const FORUM_LINK = 'https://forum.celo.org/c/support'
 export const CELO_SUPPORT_EMAIL_ADDRESS = 'support@celo.org'
 export const DEFAULT_FORNO_URL = `https://${DEFAULT_TESTNET}-forno.celo-testnet.org`
 
@@ -58,12 +63,14 @@ export const FIREBASE_ENABLED = stringToBoolean(Config.FIREBASE_ENABLED || 'true
 export const PROMOTE_REWARDS_APP = false
 export const SHOW_TESTNET_BANNER = stringToBoolean(Config.SHOW_TESTNET_BANNER || 'false')
 export const SHOW_GET_INVITE_LINK = stringToBoolean(Config.SHOW_GET_INVITE_LINK || 'false')
-export const ZERO_SYNC_ENABLED_INITIALLY = Config.ZERO_SYNC_ENABLED_INITIALLY
-  ? stringToBoolean(Config.ZERO_SYNC_ENABLED_INITIALLY)
+export const FORNO_ENABLED_INITIALLY = Config.FORNO_ENABLED_INITIALLY
+  ? stringToBoolean(Config.FORNO_ENABLED_INITIALLY)
   : false
 export const DEFAULT_SYNC_MODE: GethSyncMode = Config.DEFAULT_SYNC_MODE
   ? new BigNumber(Config.DEFAULT_SYNC_MODE).toNumber()
-  : GethSyncMode.Ultralight
+  : GethSyncMode.Lightest
+// TODO Remove when feature is stable
+export const USE_PHONE_NUMBER_PRIVACY = true
 
 // SECRETS
 export const SEGMENT_API_KEY = keyOrUndefined(secretsFile, Config.SECRETS_KEY, 'SEGMENT_API_KEY')

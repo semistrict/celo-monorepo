@@ -1,6 +1,7 @@
 import BigNumber from 'bignumber.js'
 import { InviteBy } from 'src/invite/actions'
 import { Recipient } from 'src/recipients/recipient'
+import { TransactionDataInput } from 'src/send/SendAmount'
 import { Svg } from 'svgs'
 
 export interface QrCode {
@@ -19,6 +20,13 @@ export enum Actions {
   SEND_PAYMENT_OR_INVITE_FAILURE = 'SEND/SEND_PAYMENT_OR_INVITE_FAILURE',
 }
 
+export interface HandleBarcodeDetectedAction {
+  type: Actions.BARCODE_DETECTED
+  data: QrCode
+  scanIsForSecureSend?: true
+  transactionData?: TransactionDataInput
+}
+
 export interface StoreLatestInRecentsAction {
   type: Actions.STORE_LATEST_IN_RECENTS
   recipient: Recipient
@@ -27,11 +35,12 @@ export interface StoreLatestInRecentsAction {
 export interface SendPaymentOrInviteAction {
   type: Actions.SEND_PAYMENT_OR_INVITE
   amount: BigNumber
+  timestamp: number
   reason: string
   recipient: Recipient
   recipientAddress?: string | null
   inviteMethod?: InviteBy
-  onConfirm: () => void
+  firebasePendingRequestUid: string | null | undefined
 }
 
 export interface SendPaymentOrInviteSuccessAction {
@@ -43,6 +52,7 @@ export interface SendPaymentOrInviteFailureAction {
 }
 
 export type ActionTypes =
+  | HandleBarcodeDetectedAction
   | StoreLatestInRecentsAction
   | SendPaymentOrInviteAction
   | SendPaymentOrInviteSuccessAction
@@ -53,9 +63,15 @@ export const storeLatestInRecents = (recipient: Recipient): StoreLatestInRecents
   recipient,
 })
 
-export const handleBarcodeDetected = (data: QrCode) => ({
+export const handleBarcodeDetected = (
+  data: QrCode,
+  scanIsForSecureSend?: true,
+  transactionData?: TransactionDataInput
+): HandleBarcodeDetectedAction => ({
   type: Actions.BARCODE_DETECTED,
   data,
+  scanIsForSecureSend,
+  transactionData,
 })
 
 export const shareQRCode = (qrCodeSvg: SVG) => ({
@@ -65,19 +81,21 @@ export const shareQRCode = (qrCodeSvg: SVG) => ({
 
 export const sendPaymentOrInvite = (
   amount: BigNumber,
+  timestamp: number,
   reason: string,
   recipient: Recipient,
   recipientAddress: string | null | undefined,
   inviteMethod: InviteBy | undefined,
-  onConfirm: () => void
+  firebasePendingRequestUid: string | null | undefined
 ): SendPaymentOrInviteAction => ({
   type: Actions.SEND_PAYMENT_OR_INVITE,
   amount,
+  timestamp,
   reason,
   recipient,
   recipientAddress,
   inviteMethod,
-  onConfirm,
+  firebasePendingRequestUid,
 })
 
 export const sendPaymentOrInviteSuccess = (): SendPaymentOrInviteSuccessAction => ({

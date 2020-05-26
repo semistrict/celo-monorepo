@@ -4,12 +4,12 @@ import * as React from 'react'
 import { WithTranslation } from 'react-i18next'
 import { StyleSheet, Text } from 'react-native'
 import { connect } from 'react-redux'
-import componentWithAnalytics from 'src/analytics/wrapper'
 import { Namespaces, withTranslation } from 'src/i18n'
 import { RootState } from 'src/redux/reducers'
 import { isAppConnected, isAppSynced } from 'src/redux/selectors'
 
 interface StateProps {
+  fornoEnabled: boolean
   appConnected: boolean
   appSynced: boolean
 }
@@ -18,6 +18,7 @@ type Props = StateProps & WithTranslation
 
 const mapStateToProps = (state: RootState): StateProps => {
   return {
+    fornoEnabled: state.web3.fornoMode,
     appConnected: isAppConnected(state),
     appSynced: isAppSynced(state),
   }
@@ -39,15 +40,16 @@ class DisconnectBanner extends React.PureComponent<Props> {
   }
 
   render() {
-    const { t, appConnected, appSynced } = this.props
+    const { t, appConnected, appSynced, fornoEnabled } = this.props
+    const appSyncedIfNecessary = appSynced || fornoEnabled
 
     // App's connected: show nothing
-    if (appConnected && appSynced) {
+    if (appConnected && appSyncedIfNecessary) {
       return null
     }
 
     // App's connected, was synced, and now resyncing to new blocks: show nothing
-    if (appConnected && !appSynced && DisconnectBanner.hasAppSynced) {
+    if (appConnected && !appSyncedIfNecessary && DisconnectBanner.hasAppSynced) {
       return null
     }
 
@@ -87,8 +89,6 @@ const styles = StyleSheet.create({
   },
 })
 
-export default componentWithAnalytics(
-  connect<StateProps, {}, {}, RootState>(mapStateToProps)(
-    withTranslation(Namespaces.global)(DisconnectBanner)
-  )
+export default connect<StateProps, {}, {}, RootState>(mapStateToProps)(
+  withTranslation(Namespaces.global)(DisconnectBanner)
 )

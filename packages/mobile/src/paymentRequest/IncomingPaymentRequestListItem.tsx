@@ -1,22 +1,20 @@
-import BaseNotification from '@celo/react-components/components/BaseNotification'
 import ContactCircle from '@celo/react-components/components/ContactCircle'
-import fontStyles from '@celo/react-components/styles/fonts'
+import RequestMessagingCard from '@celo/react-components/components/RequestMessagingCard'
 import BigNumber from 'bignumber.js'
 import * as React from 'react'
 import { WithTranslation } from 'react-i18next'
-import { Image, StyleSheet, Text, View } from 'react-native'
-import { PaymentRequestStatus } from 'src/account/types'
-import CeloAnalytics from 'src/analytics/CeloAnalytics'
-import { CustomEventNames } from 'src/analytics/constants'
+import { Image, StyleSheet, View } from 'react-native'
 import { TokenTransactionType } from 'src/apollo/types'
-import { updatePaymentRequestStatus } from 'src/firebase/actions'
+import CurrencyDisplay from 'src/components/CurrencyDisplay'
+import { declinePaymentRequest } from 'src/firebase/actions'
 import { CURRENCIES, CURRENCY_ENUM } from 'src/geth/consts'
 import { Namespaces, withTranslation } from 'src/i18n'
+import { AddressValidationType } from 'src/identity/reducer'
 import { unknownUserIcon } from 'src/images/Images'
 import { navigate } from 'src/navigator/NavigationService'
 import { Screens } from 'src/navigator/Screens'
 import { getRecipientThumbnail, Recipient } from 'src/recipients/recipient'
-import { getCentAwareMoneyDisplay } from 'src/utils/formatting'
+import { TransactionDataInput } from 'src/send/SendAmount'
 import Logger from 'src/utils/Logger'
 
 interface OwnProps {
@@ -24,7 +22,8 @@ interface OwnProps {
   amount: string
   comment: string
   id: string
-  updatePaymentRequestStatus: typeof updatePaymentRequestStatus
+  declinePaymentRequest: typeof declinePaymentRequest
+  addressValidationType?: AddressValidationType
 }
 
 type Props = OwnProps & WithTranslation
@@ -33,39 +32,33 @@ const AVATAR_SIZE = 40
 
 export class IncomingPaymentRequestListItem extends React.Component<Props> {
   onPay = () => {
-    const { amount, comment: reason, requester: recipient } = this.props
-    navigate(Screens.SendConfirmation, {
-      confirmationInput: {
-        reason,
-        recipient,
-        amount: new BigNumber(amount),
-        recipientAddress: recipient.address,
-        type: TokenTransactionType.PayRequest,
-      },
-      onConfirm: this.onPaymentSuccess,
-      onCancel: this.onPaymentDecline,
-    })
-  }
+    const { id, amount, comment: reason, requester: recipient, addressValidationType } = this.props
 
-  onPaymentSuccess = () => {
-    const { id } = this.props
-    this.props.updatePaymentRequestStatus(id.toString(), PaymentRequestStatus.COMPLETED)
-    Logger.showMessage(this.props.t('requestPaid'))
-    CeloAnalytics.track(CustomEventNames.incoming_request_payment_pay)
-    navigate(Screens.WalletHome)
+    const transactionData: TransactionDataInput = {
+      reason,
+      recipient,
+      amount: new BigNumber(amount),
+      type: TokenTransactionType.PayRequest,
+      firebasePendingRequestUid: id,
+    }
+
+    if (addressValidationType && addressValidationType !== AddressValidationType.NONE) {
+      navigate(Screens.ValidateRecipientIntro, { transactionData, addressValidationType })
+    } else {
+      navigate(Screens.SendConfirmation, { transactionData })
+    }
   }
 
   onPaymentDecline = () => {
     const { id } = this.props
-    this.props.updatePaymentRequestStatus(id.toString(), PaymentRequestStatus.DECLINED)
+    this.props.declinePaymentRequest(id)
     Logger.showMessage(this.props.t('requestDeclined'))
-    CeloAnalytics.track(CustomEventNames.incoming_request_payment_decline)
   }
 
   getCTA = () => {
     return [
       {
-        text: this.props.t('global:pay'),
+        text: this.props.t('global:send'),
         onPress: this.onPay,
       },
       {
@@ -76,10 +69,20 @@ export class IncomingPaymentRequestListItem extends React.Component<Props> {
   }
 
   render() {
-    const { requester, t } = this.props
+    const { requester, id, comment, t } = this.props
+    const name = requester.displayName
+    const amount = {
+      value: this.props.amount,
+      currencyCode: CURRENCIES[CURRENCY_ENUM.DOLLAR].code,
+    }
+
     return (
       <View style={styles.container}>
-        <BaseNotification
+        <RequestMessagingCard
+          testID={`IncomingPaymentRequestNotification/${id}`}
+          title={t('incomingPaymentRequestNotificationTitle', { name })}
+          details={comment}
+          amount={<CurrencyDisplay amount={amount} />}
           icon={
             <ContactCircle
               size={AVATAR_SIZE}
@@ -90,16 +93,8 @@ export class IncomingPaymentRequestListItem extends React.Component<Props> {
               <Image source={unknownUserIcon} style={styles.unknownUser} />
             </ContactCircle>
           }
-          title={t('incomingPaymentRequestNotificationTitle', {
-            name: requester.displayName,
-            amount:
-              CURRENCIES[CURRENCY_ENUM.DOLLAR].symbol + getCentAwareMoneyDisplay(this.props.amount),
-          })}
-          ctas={this.getCTA()}
-          onPress={this.onPay}
-        >
-          <Text style={fontStyles.bodySmall}>{this.props.comment || t('defaultComment')}</Text>
-        </BaseNotification>
+          callToActions={this.getCTA()}
+        />
       </View>
     )
   }

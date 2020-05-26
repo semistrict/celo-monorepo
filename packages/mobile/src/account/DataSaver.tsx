@@ -2,43 +2,46 @@ import SettingsSwitchItem from '@celo/react-components/components/SettingsSwitch
 import TextButton from '@celo/react-components/components/TextButton'
 import colors from '@celo/react-components/styles/colors'
 import fontStyles from '@celo/react-components/styles/fonts'
+import { StackScreenProps } from '@react-navigation/stack'
 import * as React from 'react'
 import { WithTranslation } from 'react-i18next'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import Modal from 'react-native-modal'
-import { NavigationInjectedProps } from 'react-navigation'
 import { connect } from 'react-redux'
 import i18n, { Namespaces, withTranslation } from 'src/i18n'
 import { headerWithBackButton } from 'src/navigator/Headers'
 import { navigateBack } from 'src/navigator/NavigationService'
+import { Screens } from 'src/navigator/Screens'
+import { StackParamList } from 'src/navigator/types'
 import { RootState } from 'src/redux/reducers'
-import { toggleZeroSyncMode } from 'src/web3/actions'
+import { toggleFornoMode } from 'src/web3/actions'
 
 interface StateProps {
-  zeroSyncEnabled: boolean
+  fornoEnabled: boolean
   gethStartedThisSession: boolean
 }
 
 interface DispatchProps {
-  toggleZeroSyncMode: typeof toggleZeroSyncMode
+  toggleFornoMode: typeof toggleFornoMode
 }
 
-type Props = StateProps & DispatchProps & WithTranslation & NavigationInjectedProps
+type OwnProps = StackScreenProps<StackParamList, Screens.DataSaver>
+
+type Props = StateProps & DispatchProps & WithTranslation & OwnProps
 
 const mapDispatchToProps = {
-  toggleZeroSyncMode,
+  toggleFornoMode,
 }
 
 const mapStateToProps = (state: RootState): StateProps => {
   return {
-    zeroSyncEnabled: state.web3.zeroSyncMode,
-    gethStartedThisSession: state.web3.gethStartedThisSession,
+    fornoEnabled: state.web3.fornoMode,
+    gethStartedThisSession: state.geth.gethStartedThisSession,
   }
 }
 
 interface State {
   switchOffModalVisible: boolean
-  switchOnModalVisible: boolean
   promptModalVisible: boolean
 }
 
@@ -87,12 +90,11 @@ export class DataSaver extends React.Component<Props, State> {
 
   state = {
     switchOffModalVisible: false,
-    switchOnModalVisible: false,
     promptModalVisible: false,
   }
 
   componentDidMount() {
-    const promptModalVisible = this.props.navigation.getParam('promptModalVisible')
+    const promptModalVisible = this.props.route.params.promptModalVisible
     if (promptModalVisible) {
       this.setState({
         promptModalVisible,
@@ -109,61 +111,46 @@ export class DataSaver extends React.Component<Props, State> {
   }
 
   onPressToggleWithSwitchOffModal = () => {
-    this.props.toggleZeroSyncMode(false)
+    this.props.toggleFornoMode(false)
     this.hideSwitchOffModal()
   }
 
-  showSwitchOnModal = () => {
-    this.setState({ switchOnModalVisible: true })
-  }
-
-  hideSwitchOnModal = () => {
-    this.setState({ switchOnModalVisible: false })
-  }
-
-  onPressToggleWithSwitchOnModal = () => {
-    this.props.toggleZeroSyncMode(true)
-    this.hideSwitchOnModal()
-  }
-
   onPressPromptModal = () => {
-    this.props.toggleZeroSyncMode(true)
+    this.props.toggleFornoMode(true)
     navigateBack()
   }
 
   hidePromptModal = () => {
-    this.props.toggleZeroSyncMode(false)
+    this.props.toggleFornoMode(false)
     navigateBack()
   }
 
-  handleZeroSyncToggle = (zeroSyncMode: boolean) => {
-    if (!zeroSyncMode && this.props.gethStartedThisSession) {
+  handleFornoToggle = (fornoMode: boolean) => {
+    if (!fornoMode && this.props.gethStartedThisSession) {
       // Starting geth a second time this app session which will
       // require an app restart, so show restart modal
       this.showSwitchOffModal()
     } else {
-      // If move to zeroSync was not successful we will need
-      // to rollback starting geth a second time
-      this.showSwitchOnModal()
+      this.props.toggleFornoMode(fornoMode)
     }
   }
 
   render() {
-    const { zeroSyncEnabled, t } = this.props
+    const { fornoEnabled, t } = this.props
     return (
       <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
         <SettingsSwitchItem
-          switchValue={zeroSyncEnabled}
-          onSwitchChange={this.handleZeroSyncToggle}
+          switchValue={fornoEnabled}
+          onSwitchChange={this.handleFornoToggle}
           details={t('dataSaverDetail')}
         >
           <Text style={fontStyles.body}>{t('enableDataSaver')}</Text>
         </SettingsSwitchItem>
         <WarningModal
           isVisible={this.state.promptModalVisible}
-          header={t('promptZeroSyncModal.header')}
-          body={t('promptZeroSyncModal.body')}
-          continueTitle={t('promptZeroSyncModal.switchToDataSaver')}
+          header={t('promptFornoModal.header')}
+          body={t('promptFornoModal.body')}
+          continueTitle={t('promptFornoModal.switchToDataSaver')}
           cancelTitle={t('global:goBack')}
           onCancel={this.hidePromptModal}
           onContinue={this.onPressPromptModal}
@@ -176,15 +163,6 @@ export class DataSaver extends React.Component<Props, State> {
           cancelTitle={t('global:cancel')}
           onCancel={this.hideSwitchOffModal}
           onContinue={this.onPressToggleWithSwitchOffModal}
-        />
-        <WarningModal
-          isVisible={this.state.switchOnModalVisible}
-          header={t('restartModalSwitchOn.header')}
-          body={t('restartModalSwitchOn.body')}
-          continueTitle={t('restartModalSwitchOn.understand')}
-          cancelTitle={t('global:cancel')}
-          onCancel={this.hideSwitchOnModal}
-          onContinue={this.onPressToggleWithSwitchOnModal}
         />
       </ScrollView>
     )
@@ -226,7 +204,7 @@ const styles = StyleSheet.create({
   },
 })
 
-export default connect<StateProps, DispatchProps, {}, RootState>(
+export default connect<StateProps, DispatchProps, OwnProps, RootState>(
   mapStateToProps,
   mapDispatchToProps
 )(withTranslation(Namespaces.accountScreen10)(DataSaver))

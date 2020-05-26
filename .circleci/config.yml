@@ -1,7 +1,7 @@
 # adapted from https://github.com/CircleCI-Public/circleci-demo-react-native
 # and https://github.com/facebook/react-native/blob/master/.circleci/config.yml
 
-version: 2
+version: 2.1
 reference:
   workspace: &workspace ~/src
   ## Configurations
@@ -18,7 +18,7 @@ reference:
 defaults: &defaults
   working_directory: ~/app
   docker:
-    - image: celohq/node10-gcloud
+    - image: celohq/node10-gcloud:v2
   environment:
     # To avoid ENOMEM problem when running node
     NODE_OPTIONS: "--max-old-space-size=4096"
@@ -34,15 +34,91 @@ android-defaults: &android-defaults
 e2e-defaults: &e2e-defaults
   <<: *defaults
   docker:
-    - image: celohq/circleci
+    - image: celohq/circleci:geth1.9-2
   environment:
     CELO_BLOCKCHAIN_BRANCH_TO_TEST: master
-
 general:
   artifacts:
     - "mobile/coverage"
     - "web/coverage"
     - "protocol/coverage"
+
+commands:
+  yarn_install:
+    steps:
+      - run:
+          name: Create cache checksum files
+          command: |
+            mkdir -p ~/.tmp/checksumfiles
+            # Concatenate package.json so we can use them as a part of the cache key
+            find . -maxdepth 3 -type f -name 'package.json' -not -path "*node_modules*" -print0 | sort -z | xargs -0 cat > ~/.tmp/checksumfiles/package.json
+            # Concatenate patches so we can use them as a part of the cache key
+            find ./patches -type f -name '*.patch' -print0 | sort -z | xargs -0 cat > ~/.tmp/checksumfiles/patches
+      - restore_cache:
+          name: Restore cached node_modules
+          keys:
+            # Using a single cache key here as we don't want to fallback on restoring node_modules produced
+            # by a different yarn.lock and patches
+            - node_modules-v3-{{ arch }}-{{ checksum "yarn.lock" }}-{{ checksum "~/.tmp/checksumfiles/package.json" }}-{{ checksum "~/.tmp/checksumfiles/patches" }}
+      - run:
+          name: Extract cached node_modules (if present)
+          command: |
+            if [ -e ~/.tmp/node_modules.tgz ]; then
+              tar -xf ~/.tmp/node_modules.tgz
+            else
+              # Dependencies have changed, create beacon file used by the install and check licenses steps
+              touch ~/.tmp/yarn_deps_have_changed
+            fi
+
+      - run:
+          name: Install dependencies
+          command: |
+            if [ ! -e ~/.tmp/yarn_deps_have_changed ]; then
+              # Though `yarn install` is instantaneous with up-to-date node_modules which is the case when we've restored cached node_modules,
+              # there's currently a bug with the generated node_modules/.yarn-integrity file which is apparently not entirely stable
+              # for a given `yarn.lock`, through different runs of `yarn install`
+              # This causes the `yarn check --integrity` step to fail
+              # and hence `yarn install` has to redo all the work again (taking unnecessary time, and making the current cache useless)
+              # See https://github.com/yarnpkg/yarn/issues/6703
+              # So here to workaround this issue, we skip the install if dependencies haven't changed
+              echo "Skipping install, dependencies haven't changed"
+              # We still have to run postinstall though
+              yarn run postinstall
+              exit 0
+            fi
+
+            # Deals with yarn install flakiness which can come due to yarnpkg.com being
+            # unreliable. For example, https://circleci.com/gh/celo-org/celo-monorepo/82685
+            yarn install || yarn install
+      - run:
+          name: Fail if someone forgot to commit "yarn.lock"
+          command: |
+            if [[ $(git status --porcelain) ]]; then
+              git --no-pager diff
+              echo "There are git differences after running yarn install"
+              exit 1
+            fi
+      - run:
+          name: Fail if generated dependency graph doesn't match committed
+          command: ./scripts/ci_check_dependency_graph_changed.sh
+      - run:
+          name: Fail if there are vulnerabilities in packages
+          command: |
+            /bin/bash -c 'yarn audit --groups dependencies --level high; [[ $? -ge 8 ]] && exit 1 || exit 0'
+
+      # Workaround save_cache not supporting globbing for the paths key
+      # see note in https://circleci.com/docs/2.0/caching/#basic-example-of-dependency-caching and https://ideas.circleci.com/ideas/CCI-I-239
+      - run:
+          name: Create cached node_modules (if necessary)
+          command: |
+            if [ ! -e ~/.tmp/node_modules.tgz ]; then 
+              tar -c node_modules/ packages/*/node_modules/ | gzip --fast > ~/.tmp/node_modules.tgz
+            fi
+      - save_cache:
+          name: Save cached node_modules
+          key: node_modules-v3-{{ arch }}-{{ checksum "yarn.lock" }}-{{ checksum "~/.tmp/checksumfiles/package.json" }}-{{ checksum "~/.tmp/checksumfiles/patches" }}
+          paths:
+            - ~/.tmp/node_modules.tgz
 
 jobs:
   install_dependencies:
@@ -79,37 +155,7 @@ jobs:
       - attach_workspace:
           at: ~/app
 
-      - restore_cache:
-          keys:
-            - yarn-v2-{{ arch }}-{{ .Branch }}-{{ checksum "yarn.lock" }}
-            - yarn-v2-{{ arch }}-{{ .Branch }}-
-            - yarn-v2-{{ arch }}-
-            - yarn-v2-
-
-      - run:
-          name: Delete @celo dir from node_modules (if its there)
-          command: rm -rf ~/app/node_modules/@celo
-
-      - run:
-          name: Install dependencies
-          command: |
-            # Deals with yarn install flakiness which can come due to yarnpkg.com being
-            # unreliable. For example, https://circleci.com/gh/celo-org/celo-monorepo/82685
-            yarn install || yarn install
-      - run:
-          name: Fail if someone forgot to commit "yarn.lock"
-          command: |
-            if [[ $(git status --porcelain) ]]; then
-              echo "There are git differences after running yarn install"
-              exit 1
-            fi
-      - run: npm rebuild scrypt
-
-      - save_cache:
-          key: yarn-v2-{{ arch }}-{{ .Branch }}-{{ checksum "yarn.lock" }}
-          paths:
-            - node_modules
-            - packages/*/node_modules
+      - yarn_install
 
       - run:
           name: Build packages
@@ -117,12 +163,20 @@ jobs:
             # separate build to avoid ENOMEM in CI :(
             yarn build --scope @celo/utils
             yarn build --scope @celo/protocol
-            yarn build --scope @celo/walletkit
-            yarn build --ignore @celo/protocol --ignore docs --ignore @celo/walletkit --ignore @celo/web
+            yarn build --ignore @celo/protocol --ignore docs
 
       - run:
           name: Check licenses
-          command: yarn check-licenses
+          command: |
+            if [ ! -e ~/.tmp/yarn_deps_have_changed ]; then
+              # Internally `yarn check-licenses` downloads dependencies into its cache again even if node_modules are up-to-date
+              # which happens when we've restored our cached node_modules.
+              # Making `yarn check-licenses` take ~45secs instead of ~3secs (depending on network conditions and build machine)
+              # So here we skip checking when it's unnecessary
+              echo "Skipping checking licenses, dependencies haven't changed"
+              exit 0
+            fi
+            yarn check-licenses
 
       - persist_to_workspace:
           root: .
@@ -209,7 +263,6 @@ jobs:
             # fi
             yarn || yarn 
             yarn build || yarn build
-            yarn run jetify
       - save_cache:
           key: yarn-v4-macos-{{ .Branch }}-{{ checksum "yarn.lock" }}
           paths:
@@ -268,6 +321,119 @@ jobs:
             - ~/src/packages/mobile/android/app/build/outputs/apk/
             - ~/.gradle/
 
+  end-to-end-mobile-test-ios:
+    macos:
+      xcode: "11.3.1"
+    working_directory: ~/app_osx
+    steps:
+      - checkout
+      - run:
+          name: Install node 10 and dependencies
+          command: |
+            brew uninstall --ignore-dependencies node icu4c
+            brew install node@10
+            brew link --overwrite --force node@10
+            yarn
+      - run:
+          name: Fail if generated dependency graph doesn't match committed
+          command: ./scripts/ci_check_dependency_graph_changed.sh
+      - run:
+          name: Check if the test should run
+          command: ./scripts/ci_check_if_test_should_run_v2.sh mobile
+
+      - run:
+          name: Configure environment variables
+          command: |
+            echo 'export PATH=/usr/local/opt/node@10/bin:$PATH' >> $BASH_ENV
+            source $BASH_ENV
+      - run:
+          name: Install needed tools
+          command: |
+            set -euo pipefail
+            export HOMEBREW_NO_AUTO_UPDATE=1
+            brew install node@10
+            brew tap wix/brew
+            brew install applesimutils
+            node -v
+      # Not using a workspace here as Node and Yarn versions
+      # differ between our macOS executor image and the Docker containers
+      - yarn_install
+      - run:
+          name: Build mobile dependencies
+          command: |
+            set -euo pipefail
+            yarn build \
+              --scope @celo/mobile \
+              --include-filtered-dependencies
+      - run:
+          name: Install bundle
+          command: |
+            set -euo pipefail
+            cd packages/mobile
+            bundle install
+      - run:
+          name: Fail if someone forgot to commit "Gemfile.lock"
+          command: |
+            set -euo pipefail
+            if [[ $(git status --porcelain) ]]; then
+              git --no-pager diff
+              echo "There are git differences after running bundle install"
+              exit 1
+            fi
+      - restore_cache:
+          name: Restore pods cache
+          keys:
+            # Using a single cache key here as we don't want partial cache restoration
+            # i.e. when Podfile/Podfile.lock change, we want to start fresh again
+            - pods-wallet-v1-{{ arch }}-{{ checksum "packages/mobile/ios/Podfile" }}-{{ checksum "packages/mobile/ios/Podfile.lock" }}
+      - run:
+          name: Install pods
+          command: |
+            set -euo pipefail
+            cd packages/mobile/ios
+            bundle exec pod install
+      - run:
+          name: Fail if someone forgot to commit "Podfile.lock"
+          command: |
+            set -euo pipefail
+            if [[ $(git status --porcelain) ]]; then
+              git --no-pager diff
+              echo "There are git differences after running pod install"
+              exit 1
+            fi
+      - save_cache:
+          name: Save pods cache
+          key: pods-wallet-v1-{{ arch }}-{{ checksum "packages/mobile/ios/Podfile" }}-{{ checksum "packages/mobile/ios/Podfile.lock" }}
+          paths:
+            - packages/mobile/ios/Pods
+      - restore_cache:
+          name: Restore built detox framework
+          keys:
+            - detox-v1-{{ arch }}-{{ checksum "yarn.lock" }}-{{ checksum "~/.tmp/checksumfiles/patches" }}
+      - run:
+          name: Build detox framework
+          command: |
+            set -euo pipefail
+            cd packages/mobile
+            # Make sure the detox framework is present
+            yarn run detox build-framework-cache
+      - save_cache:
+          name: Save built detox framework
+          key: detox-v1-{{ arch }}-{{ checksum "yarn.lock" }}-{{ checksum "~/.tmp/checksumfiles/patches" }}
+          paths:
+            - ~/Library/Detox/ios
+      - run:
+          name: Run e2e tests
+          command: |
+            set -euo pipefail
+            cd packages/mobile
+            # Create dummy Google services plist
+            /usr/libexec/PlistBuddy -c "Save" ios/GoogleService-Info.dev.plist
+            yarn run test:e2e:ios
+      - store_artifacts:
+          path: packages/mobile/e2e/artifacts
+          destination: mobile/e2e/artifacts
+
   lint-checks:
     <<: *defaults
     steps:
@@ -288,7 +454,7 @@ jobs:
           name: jest tests
           command: |
             mkdir -p test-results/jest
-            yarn run lerna --ignore @celo/contractkit --ignore @celo/mobile --ignore @celo/protocol --ignore @celo/celotool --ignore @celo/walletkit --ignore @celo/celocli run test
+            yarn run lerna --ignore @celo/contractkit --ignore @celo/mobile --ignore @celo/protocol --ignore @celo/celotool --ignore @celo/celocli run test
 
       - store_test_results:
           path: test-results
@@ -306,27 +472,16 @@ jobs:
           name: Upload to CodeCov
           command: yarn codecov -F web
 
-  mobile-test-build-app:
-    <<: *android-defaults
-    resource_class: large
-
-    steps:
-      - attach_workspace:
-          at: ~/app
-      - run:
-          name: Build Android app (debug version)
-          command: |
-            set -euo pipefail
-            yarn run jetify
-            cd packages/mobile/android
-            ENVFILE=.env.test ./gradlew assembleDebug
-            cd -
-
   mobile-test:
     <<: *defaults
     steps:
       - attach_workspace:
           at: ~/app
+
+      - run:
+          name: Check if the test should run
+          command: |
+            ./scripts/ci_check_if_test_should_run_v2.sh mobile
 
       - run:
           name: Ensure translations are not missing
@@ -366,6 +521,11 @@ jobs:
           at: ~/app
 
       - run:
+          name: Check if the test should run
+          command: |
+            ./scripts/ci_check_if_test_should_run_v2.sh verification-pool-api
+
+      - run:
           name: jest tests
           command: |
             mkdir -p test-results/jest
@@ -375,14 +535,14 @@ jobs:
 
   protocol-test:
     <<: *defaults
+    resource_class: large
     steps:
       - attach_workspace:
           at: ~/app
       - run:
           name: Check if the test should run
           command: |
-            FILES_TO_CHECK="${PWD}/packages/protocol,${PWD}/packages/utils,${PWD}/.circleci/config.yml"
-            ./scripts/ci_check_if_test_should_run_v2.sh ${FILES_TO_CHECK}
+            ./scripts/ci_check_if_test_should_run_v2.sh protocol
       - run:
           name: test
           # Flaky tests - run them twice
@@ -397,8 +557,7 @@ jobs:
       - run:
           name: Check if the test should run
           command: |
-            FILES_TO_CHECK="${PWD}/packages/protocol,${PWD}/packages/utils,${PWD}/.circleci/config.yml"
-            ./scripts/ci_check_if_test_should_run_v2.sh ${FILES_TO_CHECK}
+            ./scripts/ci_check_if_test_should_run_v2.sh protocol
       - run:
           name: test
           # Flaky tests - run them twice
@@ -416,39 +575,35 @@ jobs:
       - attach_workspace:
           at: ~/app
       - run:
+          name: Check if the test should run
+          command: |
+            ./scripts/ci_check_if_test_should_run_v2.sh contractkit
+      - run:
           name: Generate DevChain
           command: |
             (cd packages/contractkit && yarn test:reset)
       - run:
           name: Run Tests
           command: yarn --cwd=packages/contractkit test
-
-  walletkit-test:
-    <<: *defaults
-    steps:
-      - attach_workspace:
-          at: ~/app
       - run:
-          name: test alphanet
+          name: Fail if someone forgot to commit contractkit docs
           command: |
-            # Test alphanet
-            set -euo pipefail
-            yarn --cwd=packages/walletkit build alfajores
-            yarn --cwd=packages/walletkit test
-
-      - run:
-          name: test alphanet staging
-          command: |
-            # Test alphanet
-            set -euo pipefail
-            yarn --cwd=packages/walletkit build alfajoresstaging
-            yarn --cwd=packages/walletkit test
+            yarn --cwd=packages/contractkit docs
+            if [[ $(git status packages/docs/developer-resources/contractkit --porcelain) ]]; then
+              git --no-pager diff packages/docs/developer-resources/contractkit
+              echo "There are git differences after generating contractkit docs"
+              exit 1
+            fi
 
   cli-test:
     <<: *defaults
     steps:
       - attach_workspace:
           at: ~/app
+      - run:
+          name: Check if the test should run
+          command: |
+            ./scripts/ci_check_if_test_should_run_v2.sh cli
       - run:
           name: Generate DevChain
           command: |
@@ -486,7 +641,10 @@ jobs:
     steps:
       - attach_workspace:
           at: ~/app
-
+      - run:
+          name: Check if the test should run
+          command: |
+            ./scripts/ci_check_if_test_should_run_v2.sh typescript
       - run:
           name: Install and test the npm package
           command: |
@@ -501,7 +659,10 @@ jobs:
     steps:
       - attach_workspace:
           at: ~/app
-
+      - run:
+          name: Check if the test should run
+          command: |
+            ./scripts/ci_check_if_test_should_run_v2.sh utils
       - run:
           name: Install and test the npm package
           command: |
@@ -513,14 +674,14 @@ jobs:
 
   end-to-end-geth-transfer-test:
     <<: *e2e-defaults
+    resource_class: large
     steps:
       - attach_workspace:
           at: ~/app
       - run:
           name: Check if the test should run
           command: |
-            FILES_TO_CHECK="${PWD}/packages/celotool,${PWD}/packages/protocol,${PWD}/.circleci/config.yml"
-            ./scripts/ci_check_if_test_should_run_v2.sh ${FILES_TO_CHECK}
+            ./scripts/ci_check_if_test_should_run_v2.sh celotool
       - run:
           name: Run test
           no_output_timeout: 20m
@@ -531,14 +692,14 @@ jobs:
 
   end-to-end-geth-blockchain-parameters-test:
     <<: *e2e-defaults
+    resource_class: large
     steps:
       - attach_workspace:
           at: ~/app
       - run:
           name: Check if the test should run
           command: |
-            FILES_TO_CHECK="${PWD}/packages/celotool,${PWD}/packages/protocol,${PWD}/.circleci/config.yml"
-            ./scripts/ci_check_if_test_should_run_v2.sh ${FILES_TO_CHECK}
+            ./scripts/ci_check_if_test_should_run_v2.sh celotool
       - run:
           name: Run test
           no_output_timeout: 20m
@@ -549,16 +710,14 @@ jobs:
 
   end-to-end-geth-slashing-test:
     <<: *e2e-defaults
-    # Source: https://circleci.com/docs/2.0/configuration-reference/#resource_class
-    resource_class: medium+
+    resource_class: large
     steps:
       - attach_workspace:
           at: ~/app
       - run:
           name: Check if the test should run
           command: |
-            FILES_TO_CHECK="${PWD}/packages/celotool,${PWD}/packages/protocol,${PWD}/.circleci/config.yml"
-            ./scripts/ci_check_if_test_should_run_v2.sh ${FILES_TO_CHECK}
+            ./scripts/ci_check_if_test_should_run_v2.sh celotool
       - run:
           name: Run test
           no_output_timeout: 20m
@@ -569,16 +728,14 @@ jobs:
 
   end-to-end-geth-governance-test:
     <<: *e2e-defaults
-    # Source: https://circleci.com/docs/2.0/configuration-reference/#resource_class
-    resource_class: medium+
+    resource_class: large
     steps:
       - attach_workspace:
           at: ~/app
       - run:
           name: Check if the test should run
           command: |
-            FILES_TO_CHECK="${PWD}/packages/celotool,${PWD}/packages/protocol,${PWD}/.circleci/config.yml"
-            ./scripts/ci_check_if_test_should_run_v2.sh ${FILES_TO_CHECK}
+            ./scripts/ci_check_if_test_should_run_v2.sh celotool
       - run:
           name: Run test
           no_output_timeout: 20m
@@ -589,16 +746,14 @@ jobs:
 
   end-to-end-geth-sync-test:
     <<: *e2e-defaults
-    # Source: https://circleci.com/docs/2.0/configuration-reference/#resource_class
-    resource_class: medium+
+    resource_class: large
     steps:
       - attach_workspace:
           at: ~/app
       - run:
           name: Check if the test should run
           command: |
-            FILES_TO_CHECK="${PWD}/packages/celotool,${PWD}/packages/protocol,${PWD}/.circleci/config.yml"
-            ./scripts/ci_check_if_test_should_run_v2.sh ${FILES_TO_CHECK}
+            ./scripts/ci_check_if_test_should_run_v2.sh celotool
       - run:
           name: Run test
           command: |
@@ -615,8 +770,7 @@ jobs:
       - run:
           name: Check if the test should run
           command: |
-            FILES_TO_CHECK="${PWD}/packages/celotool,${PWD}/packages/protocol,${PWD}/.circleci/config.yml"
-            ./scripts/ci_check_if_test_should_run_v2.sh ${FILES_TO_CHECK}
+            ./scripts/ci_check_if_test_should_run_v2.sh celotool
       - run:
           name: Run test
           command: |
@@ -631,7 +785,10 @@ jobs:
     steps:
       - attach_workspace:
           at: ~/app
-
+      - run:
+          name: Check if the test should run
+          command: |
+            ./scripts/ci_check_if_test_should_run_v2.sh web
       - run: mkdir ~/.ssh/ && echo -e "Host github.com\n\tStrictHostKeyChecking no\n" > ~/.ssh/config
       - run: cd packages/web && ./circle_deploy.sh
 
@@ -640,6 +797,10 @@ jobs:
     docker:
       - image: celohq/node10-gcloud
     steps:
+      - run:
+          name: Check if the test should run
+          command: |
+            ./scripts/ci_check_if_test_should_run_v2.sh typescript
       - run:
           name: Installing npm package - @celo/typescript
           command: yarn add @celo/typescript
@@ -650,6 +811,10 @@ jobs:
       - image: celohq/node10-gcloud
     steps:
       - run:
+          name: Check if the test should run
+          command: |
+            ./scripts/ci_check_if_test_should_run_v2.sh utils
+      - run:
           name: Installing npm package - @celo/utils
           command: yarn add @celo/utils
 
@@ -659,23 +824,15 @@ jobs:
       - image: celohq/node10-gcloud
     steps:
       - run:
+          name: Check if the test should run
+          command: |
+            ./scripts/ci_check_if_test_should_run_v2.sh contractkit
+      - run:
           name: Installing npm package - @celo/contractkit
           command: |
             # Try one more time in case the first attempt fails
             # to deal with scenarios like https://circleci.com/gh/celo-org/celo-monorepo/23329
             yarn add @celo/contractkit || yarn add @celo/contractkit
-
-  test-walletkit-npm-package-install:
-    working_directory: ~/app
-    docker:
-      - image: celohq/node10-gcloud
-    steps:
-      - run:
-          name: Installing npm package - @celo/walletkit
-          command: |
-            # Try one more time in case the first attempt fails
-            # to deal with scenarios like https://circleci.com/gh/celo-org/celo-monorepo/23329
-            yarn add @celo/walletkit || yarn add @celo/walletkit
 
   test-celocli-npm-package-install:
     working_directory: ~/app
@@ -683,11 +840,28 @@ jobs:
       - image: celohq/node10-gcloud
     steps:
       - run:
+          name: Check if the test should run
+          command: |
+            ./scripts/ci_check_if_test_should_run_v2.sh cli
+      - run:
           name: Installing npm package - @celo/celocli
           command: npm install @celo/celocli
       - run:
           name: Minor test of celocli
           command: ./node_modules/.bin/celocli account:new # Small test
+
+  phone-number-privacy-test:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/app
+      - run:
+          name: Check if the test should run
+          command: |
+            ./scripts/ci_check_if_test_should_run_v2.sh phone-number-privacy
+      - run:
+          name: Run Tests
+          command: yarn --cwd=packages/phone-number-privacy test
 
 workflows:
   version: 2
@@ -700,9 +874,6 @@ workflows:
       - general-test:
           requires:
             - install_dependencies
-      - walletkit-test:
-          requires:
-            - install_dependencies
       - cli-test:
           requires:
             - install_dependencies
@@ -712,16 +883,13 @@ workflows:
       - mobile-test:
           requires:
             - lint-checks
-      - mobile-test-build-app:
-          requires:
-            - mobile-test
+      - end-to-end-mobile-test-ios
       - verification-pool-api:
           requires:
             - lint-checks
       - protocol-test:
           requires:
             - lint-checks
-            - walletkit-test
       - typescript-test:
           requires:
             - install_dependencies
@@ -752,6 +920,9 @@ workflows:
           requires:
             - lint-checks
             - contractkit-test
+      - phone-number-privacy-test:
+          requires:
+            - lint-checks
   npm-install-testing-cron-workflow:
     triggers:
       - schedule:
@@ -765,7 +936,6 @@ workflows:
     jobs:
       - test-typescript-npm-package-install
       - test-utils-npm-package-install
-      - test-walletkit-npm-package-install
       - test-contractkit-npm-package-install
       - test-celocli-npm-package-install
   protocol-testing-with-code-coverage-cron-workflow:
@@ -783,10 +953,6 @@ workflows:
       - lint-checks:
           requires:
             - install_dependencies
-      - walletkit-test:
-          requires:
-            - install_dependencies
       - protocol-test-with-code-coverage:
           requires:
             - lint-checks
-            - walletkit-test

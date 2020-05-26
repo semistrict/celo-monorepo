@@ -1,5 +1,5 @@
+import { FirebaseMessagingTypes } from '@react-native-firebase/messaging'
 import BigNumber from 'bignumber.js'
-import { Notification } from 'react-native-firebase/notifications'
 import { call, put, select } from 'redux-saga/effects'
 import {
   NotificationReceiveState,
@@ -10,7 +10,6 @@ import {
 import { showMessage } from 'src/alert/actions'
 import { TokenTransactionType } from 'src/apollo/types'
 import { CURRENCIES, resolveCurrency } from 'src/geth/consts'
-import { refreshAllBalances } from 'src/home/actions'
 import { addressToE164NumberSelector } from 'src/identity/reducer'
 import { getRecipientFromPaymentRequest } from 'src/paymentRequest/utils'
 import { getRecipientFromAddress } from 'src/recipients/recipient'
@@ -41,10 +40,10 @@ function* handlePaymentRequested(
   const targetRecipient = getRecipientFromPaymentRequest(paymentRequest, recipientCache)
 
   navigateToRequestedPaymentReview({
+    firebasePendingRequestUid: paymentRequest.uid,
     recipient: targetRecipient,
     amount: new BigNumber(paymentRequest.amount),
     reason: paymentRequest.comment,
-    recipientAddress: targetRecipient.address,
     type: TokenTransactionType.PayRequest,
   })
 }
@@ -53,8 +52,6 @@ function* handlePaymentReceived(
   transferNotification: TransferNotificationData,
   notificationState: NotificationReceiveState
 ) {
-  yield put(refreshAllBalances())
-
   if (notificationState !== NotificationReceiveState.APP_ALREADY_OPEN) {
     const recipientCache = yield select(recipientCacheSelector)
     const addressToE164Number = yield select(addressToE164NumberSelector)
@@ -66,7 +63,7 @@ function* handlePaymentReceived(
       new BigNumber(transferNotification.timestamp).toNumber(),
       {
         amount: {
-          value: divideByWei(transferNotification.value).toString(),
+          value: divideByWei(transferNotification.value),
           currencyCode: CURRENCIES[currency].code,
         },
         address: transferNotification.sender.toLowerCase(),
@@ -79,17 +76,20 @@ function* handlePaymentReceived(
 }
 
 export function* handleNotification(
-  notification: Notification,
+  message: FirebaseMessagingTypes.RemoteMessage,
   notificationState: NotificationReceiveState
 ) {
   if (notificationState === NotificationReceiveState.APP_ALREADY_OPEN) {
-    yield put(showMessage(notification.title))
+    const title = message.notification?.title
+    if (title) {
+      yield put(showMessage(title))
+    }
   }
-  switch (notification.data.type) {
+  switch (message.data?.type) {
     case NotificationTypes.PAYMENT_REQUESTED:
       yield call(
         handlePaymentRequested,
-        (notification.data as unknown) as PaymentRequest,
+        (message.data as unknown) as PaymentRequest,
         notificationState
       )
       break
@@ -97,13 +97,13 @@ export function* handleNotification(
     case NotificationTypes.PAYMENT_RECEIVED:
       yield call(
         handlePaymentReceived,
-        (notification.data as unknown) as TransferNotificationData,
+        (message.data as unknown) as TransferNotificationData,
         notificationState
       )
       break
 
     default:
-      Logger.info(TAG, `Got unknown notification type ${notification.data.type}`)
+      Logger.info(TAG, `Got unknown notification type ${message.data?.type}`)
       break
   }
 }

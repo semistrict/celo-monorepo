@@ -3,7 +3,8 @@ import * as React from 'react'
 import { WithTranslation } from 'react-i18next'
 import { ScrollView, StyleSheet, View } from 'react-native'
 import { connect } from 'react-redux'
-import { UserContactDetails, userContactDetailsSelector } from 'src/account/reducer'
+import { UserContactDetails } from 'src/account/reducer'
+import { userContactDetailsSelector } from 'src/account/selectors'
 import SettingsItem from 'src/account/SettingsItem'
 import CeloAnalytics from 'src/analytics/CeloAnalytics'
 import { CustomEventNames } from 'src/analytics/constants'
@@ -18,9 +19,8 @@ interface StateProps {
   userContact: UserContactDetails
 }
 
-interface OwnProps {
-  navigation: any
-}
+// tslint:disable-next-line: no-empty-interface
+interface OwnProps {}
 
 type Props = OwnProps & StateProps & WithTranslation
 const mapStateToProps = (state: RootState) => {

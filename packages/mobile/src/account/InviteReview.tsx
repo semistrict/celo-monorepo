@@ -3,18 +3,20 @@ import ReviewFrame from '@celo/react-components/components/ReviewFrame'
 import ReviewHeader from '@celo/react-components/components/ReviewHeader'
 import colors from '@celo/react-components/styles/colors'
 import { CURRENCY_ENUM } from '@celo/utils/src/currencies'
+import { StackScreenProps } from '@react-navigation/stack'
 import BigNumber from 'bignumber.js'
 import * as React from 'react'
 import { WithTranslation } from 'react-i18next'
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
 import SafeAreaView from 'react-native-safe-area-view'
-import { NavigationInjectedProps } from 'react-navigation'
 import { connect } from 'react-redux'
 import { hideAlert, showError } from 'src/alert/actions'
 import CeloAnalytics from 'src/analytics/CeloAnalytics'
 import { CustomEventNames } from 'src/analytics/constants'
-import componentWithAnalytics from 'src/analytics/wrapper'
 import { TokenTransactionType } from 'src/apollo/types'
+import { FeeType } from 'src/fees/actions'
+import CalculateFee from 'src/fees/CalculateFee'
+import { getFeeDollars } from 'src/fees/selectors'
 import GethAwareButton from 'src/geth/GethAwareButton'
 import { Namespaces, withTranslation } from 'src/i18n'
 import SMSLogo from 'src/icons/InviteSendReceive'
@@ -22,21 +24,21 @@ import WhatsAppLogo from 'src/icons/WhatsAppLogo'
 import { InviteBy, sendInvite } from 'src/invite/actions'
 import { getInvitationVerificationFeeInDollars } from 'src/invite/saga'
 import { navigateBack } from 'src/navigator/NavigationService'
-import { Recipient } from 'src/recipients/recipient'
+import { Screens } from 'src/navigator/Screens'
+import { StackParamList } from 'src/navigator/types'
 import { RootState } from 'src/redux/reducers'
 import TransferReviewCard from 'src/send/TransferReviewCard'
 import { fetchDollarBalance } from 'src/stableToken/actions'
+import { currentAccountSelector } from 'src/web3/selectors'
 
 interface State {
   amountIsValid: boolean
 }
 
-type Props = StateProps & DispatchProps & NavigationInjectedProps & WithTranslation
-
 interface StateProps {
+  account: string | null
   inviteInProgress: boolean
   dollarBalance: string
-  defaultCountryCode: string
 }
 
 interface DispatchProps {
@@ -46,10 +48,14 @@ interface DispatchProps {
   hideAlert: typeof hideAlert
 }
 
+type OwnProps = StackScreenProps<StackParamList, Screens.InviteReview>
+
+type Props = StateProps & DispatchProps & WithTranslation & OwnProps
+
 const mapStateToProps = (state: RootState): StateProps => ({
+  account: currentAccountSelector(state),
   inviteInProgress: state.invite.isSendingInvite,
   dollarBalance: state.stableToken.balance || '0',
-  defaultCountryCode: state.account.defaultCountryCode,
 })
 
 const mapDispatchToProps = {
@@ -73,8 +79,8 @@ export class InviteReview extends React.Component<Props, State> {
     this.checkIfEnoughFundsAreAvailable()
   }
 
-  getRecipient = (): Recipient => {
-    const recipient = this.props.navigation.getParam('recipient')
+  getRecipient = () => {
+    const recipient = this.props.route.params.recipient
     if (!recipient) {
       throw new Error('Recipient expected')
     }
@@ -112,7 +118,7 @@ export class InviteReview extends React.Component<Props, State> {
       throw new Error("Can't send to recipient without valid e164 number")
     }
 
-    this.props.sendInvite(recipient.displayName, recipient.e164PhoneNumber, inviteMode)
+    this.props.sendInvite(recipient.e164PhoneNumber, inviteMode)
   }
 
   onEdit = () => {
@@ -167,19 +173,33 @@ export class InviteReview extends React.Component<Props, State> {
   }
 
   render() {
+    const { account } = this.props
+    if (!account) {
+      throw Error('Account is required')
+    }
+
     const recipient = this.getRecipient()
+    const amount = getInvitationVerificationFeeInDollars()
+
     return (
       <SafeAreaView style={style.container}>
         <ReviewFrame HeaderComponent={this.renderHeader} FooterComponent={this.renderFooter}>
-          <TransferReviewCard
-            recipient={recipient}
-            type={TokenTransactionType.InviteSent}
-            address={recipient.address}
-            value={getInvitationVerificationFeeInDollars()}
-            e164PhoneNumber={recipient.e164PhoneNumber}
-            currency={CURRENCY_ENUM.DOLLAR}
-            fee={new BigNumber(0)}
-          />
+          <CalculateFee feeType={FeeType.INVITE} account={account} amount={amount} comment="">
+            {(asyncFee) => (
+              <TransferReviewCard
+                recipient={recipient}
+                type={TokenTransactionType.InviteSent}
+                address={recipient.address}
+                // It's only an invite without additional funds
+                value={new BigNumber(0)}
+                e164PhoneNumber={recipient.e164PhoneNumber}
+                currency={CURRENCY_ENUM.DOLLAR}
+                fee={getFeeDollars(asyncFee.result)}
+                isLoadingFee={asyncFee.loading}
+                feeError={asyncFee.error}
+              />
+            )}
+          </CalculateFee>
         </ReviewFrame>
       </SafeAreaView>
     )
@@ -202,9 +222,7 @@ const style = StyleSheet.create({
   },
 })
 
-export default componentWithAnalytics(
-  connect<StateProps, DispatchProps, {}, RootState>(
-    mapStateToProps,
-    mapDispatchToProps
-  )(withTranslation(Namespaces.inviteFlow11)(InviteReview))
-)
+export default connect<StateProps, DispatchProps, OwnProps, RootState>(
+  mapStateToProps,
+  mapDispatchToProps
+)(withTranslation(Namespaces.inviteFlow11)(InviteReview))

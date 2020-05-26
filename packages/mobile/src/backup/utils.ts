@@ -1,5 +1,7 @@
+import { generateMnemonic, MnemonicLanguages, MnemonicStrength } from '@celo/utils/src/account'
 import * as _ from 'lodash'
-import { generateMnemonic, wordlists } from 'react-native-bip39'
+import { useAsync } from 'react-async-hook'
+import * as bip39 from 'react-native-bip39'
 import { getKey } from 'src/utils/keyStore'
 import Logger from 'src/utils/Logger'
 
@@ -12,7 +14,11 @@ export const MNEMONIC_SPLITTER = 'celo'
 export async function createQuizWordList(mnemonic: string, language: string | null) {
   const disallowedWordSet = new Set(mnemonic.split(' '))
   const languageWordList = getWordlist(language)
-  const wordOptions: string = await generateMnemonic(1000, null, languageWordList)
+  const wordOptions: string = await generateMnemonic(
+    MnemonicStrength.s256_24words,
+    languageWordList,
+    bip39
+  )
   return wordOptions.split(' ').filter((word: string) => !disallowedWordSet.has(word))
 }
 
@@ -39,15 +45,15 @@ export function selectQuizWordOptions(
 
 export function getWordlist(language: string | null) {
   if (!language) {
-    return wordlists.EN
+    return MnemonicLanguages.english
   }
 
   switch (language.slice(0, 2)) {
     case 'es': {
-      return wordlists.ES
+      return MnemonicLanguages.spanish
     }
     default: {
-      return wordlists.EN
+      return MnemonicLanguages.english
     }
   }
 }
@@ -98,6 +104,11 @@ export async function getStoredMnemonic(): Promise<string | null> {
     Logger.error(TAG, 'Failed to retrieve mnemonic', error)
     return null
   }
+}
+
+export function useAccountKey() {
+  const asyncAccountKey = useAsync(getStoredMnemonic, [])
+  return asyncAccountKey.result
 }
 
 // Because of a RN bug, we can't fully clean the text as the user types
