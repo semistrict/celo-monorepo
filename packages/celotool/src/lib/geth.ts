@@ -950,7 +950,7 @@ export async function startGeth(
   }
 
   if (txFeeRecipient) {
-    gethArgs.push('--txFeeRecipient', txFeeRecipient)
+    gethArgs.push('--tx-fee-recipient', txFeeRecipient)
   }
 
   if (lightserv) {
